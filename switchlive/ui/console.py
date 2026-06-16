@@ -93,13 +93,51 @@ def show_start_menu() -> None:
         elif choice == "1":
             _handle_discovery()
         elif choice == "2":
-            print("\n  ⚠️ Тестирование — ещё не реализовано (issue #8)\n")
+            _handle_test_menu()
         elif choice == "3":
             print("\n  ⚠️ История — ещё не реализовано (issue #14)\n")
         elif choice == "4":
             print("\n  ⚠️ Настройки — ещё не реализовано\n")
         else:
             print("\n  ❌ Неизвестная команда\n")
+
+
+def _handle_test_menu() -> None:
+    """Меню тестирования."""
+    from switchlive.tests.traffic_iperf import (
+        check_iperf3_available,
+        check_server_reachable,
+    )
+
+    print("\n  ▶️  Тестирование\n")
+    print("  iperf3 трафик-тест:")
+
+    # Проверка iperf3
+    if not check_iperf3_available():
+        print("  ❌ iperf3 не установлен. Установите: apt install iperf3")
+        return
+
+    print("  ✅ iperf3 найден")
+
+    # IP сервера
+    server_ip = input("  IP iperf-сервера (пусто = без трафик-теста): ").strip()
+    if not server_ip:
+        print("  ℹ️  Трафик-тест пропущен\n")
+        return
+
+    # Проверка доступности
+    server_port = 5201
+    print(f"  Проверка {server_ip}:{server_port}...", end=" ")
+    if check_server_reachable(server_ip, server_port):
+        print("✅ хост обнаружен")
+    else:
+        print("❌ недоступен")
+        print("  ⚠️  Проверьте IP и запущен ли iperf3 -s на сервере\n")
+        return
+
+    print()
+    print("  ⚠️ Walk-test с iperf пока запускается из API.")
+    print("  Конфигурация принята. Полная интеграция UI в следующем PR.\n")
 
 
 if __name__ == "__main__":
