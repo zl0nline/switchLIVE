@@ -1,11 +1,28 @@
 {
-  "iperf_server_host": "192.168.1.100",
-  "iperf_server_port": 5201,
-  "iperf_duration": 10,
-  "link_timeout_sec": 30,
-  "poe_timeout_sec": 180,
+  "serial": {
+    "default_baudrates": [9600, 115200],
+    "timeout_sec": 1.0,
+    "idle_gap_sec": 0.3
+  },
+  "iperf": {
+    "server_host": "192.168.1.100",
+    "server_port": 5201,
+    "duration_sec": 10,
+    "min_throughput_mbps": 50.0,
+    "max_loss_percent": 5.0
+  },
+  "timeouts": {
+    "link_sec": 30,
+    "poe_sec": 180,
+    "max_sec": 600
+  },
   "standard_login_file": "standart_login.txt",
-  "report_dir": "reports",
-  "db_path": "switchlive.db",
+  "reports": {
+    "report_dir": "reports",
+    "db_path": "switchlive.db"
+  },
+  "finalization": {
+    "factory_reset": false
+  },
   "debug": false
 }
