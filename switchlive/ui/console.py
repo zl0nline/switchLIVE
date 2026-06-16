@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 import sys
 
+from switchlive.app.discovery import run_discovery
+from switchlive.core.credentials import Credentials
+
 
 def _print_menu() -> None:
     print()
@@ -18,6 +21,53 @@ def _print_menu() -> None:
     print("  4. ⚙️  Настройки")
     print("  0. 🚪 Выход")
     print()
+
+
+def _manual_credential_prompt(standard_creds: list[Credentials]) -> Credentials | None:
+    """Запрос логина/пароля у оператора."""
+    print()
+    print("  ⚠️ Стандартные логины не подошли.")
+    print("  Введите логин и пароль вручную:")
+    try:
+        username = input("  Логин: ").strip()
+        password = input("  Пароль: ").strip()
+        enable = input("  Enable password (пусто = нет): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+
+    if not username:
+        return None
+    return Credentials(username=username, password=password, enable_password=enable)
+
+
+def _handle_discovery() -> None:
+    """Запуск автопоиска коммутатора."""
+    print("\n  🔍 Поиск коммутатора...\n")
+
+    def progress(msg: str) -> None:
+        print(f"  {msg}")
+
+    result = run_discovery(
+        standard_logins_path="standart_login.txt",
+        manual_credential_callback=_manual_credential_prompt,
+        progress_callback=progress,
+    )
+
+    print()
+    if result.found and result.identity:
+        ident = result.identity
+        print("  ✅ Устройство найдено!")
+        print(f"     Вендор:   {ident.vendor}")
+        print(f"     Модель:    {ident.model}")
+        print(f"     Серийник:  {ident.serial}")
+        print(f"     Прошивка:  {ident.firmware}")
+        print(f"     Порт:      {result.port}")
+        print(f"     Авторизация: {result.auth_method}")
+    elif result.error:
+        print(f"  ❌ {result.error}")
+    else:
+        print("  ❌ Устройство не найдено")
 
 
 def show_start_menu() -> None:
@@ -41,7 +91,7 @@ def show_start_menu() -> None:
             print("  До свидания!")
             break
         elif choice == "1":
-            print("\n  ⚠️ Определение коммутатора — ещё не реализовано (issue #5)\n")
+            _handle_discovery()
         elif choice == "2":
             print("\n  ⚠️ Тестирование — ещё не реализовано (issue #8)\n")
         elif choice == "3":
