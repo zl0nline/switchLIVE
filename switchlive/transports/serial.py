@@ -13,12 +13,12 @@ import logging
 import time
 
 from switchlive.core.errors import TransportError
-from switchlive.transports.base import CommandTransport, PortInfo
+from switchlive.transports.base import CommandTransport, SerialPortInfo
 
 log = logging.getLogger(__name__)
 
 
-def list_serial_ports() -> list[PortInfo]:
+def list_serial_ports() -> list[SerialPortInfo]:
     """Вернуть список доступных serial/COM портов."""
     try:
         from serial.tools import list_ports  # noqa: PLC0415
@@ -28,7 +28,7 @@ def list_serial_ports() -> list[PortInfo]:
 
     ports = []
     for cp in list_ports.comports():
-        info = PortInfo(
+        info = SerialPortInfo(
             name=cp.device,
             description=cp.description or "",
             hwid=cp.hwid or "",

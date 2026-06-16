@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 
 from switchlive.core.errors import TransportError
-from switchlive.transports.base import CommandTransport, PortInfo
+from switchlive.transports.base import CommandTransport, SerialPortInfo
 from switchlive.transports.serial import SerialTransport, list_serial_ports
 
 
 def test_port_info_dataclass():
-    info = PortInfo(name="/dev/ttyUSB0", description="USB Serial")
+    info = SerialPortInfo(name="/dev/ttyUSB0", description="USB Serial")
     assert info.name == "/dev/ttyUSB0"
     assert info.description == "USB Serial"
     assert info.vendor_id == ""

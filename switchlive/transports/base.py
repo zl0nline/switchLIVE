@@ -11,8 +11,8 @@ from dataclasses import dataclass
 
 
 @dataclass
-class PortInfo:
-    """Информация о доступном порту."""
+class SerialPortInfo:
+    """Информация о доступном serial/COM-порту."""
 
     name: str  # /dev/ttyUSB0, COM3, ...
     description: str = ""
