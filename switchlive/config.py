@@ -34,8 +34,27 @@ class Config:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
+        normalized = dict(data)
+        if isinstance(data.get("iperf"), dict):
+            iperf = data["iperf"]
+            normalized.setdefault("iperf_server_host", iperf.get("server_host"))
+            normalized.setdefault("iperf_server_port", iperf.get("server_port"))
+            normalized.setdefault("iperf_duration", iperf.get("duration_sec"))
+        if isinstance(data.get("timeouts"), dict):
+            timeouts = data["timeouts"]
+            normalized.setdefault("link_timeout_sec", timeouts.get("link_sec"))
+            normalized.setdefault("poe_timeout_sec", timeouts.get("poe_sec"))
+        if isinstance(data.get("reports"), dict):
+            reports = data["reports"]
+            normalized.setdefault("report_dir", reports.get("report_dir"))
+            normalized.setdefault("db_path", reports.get("db_path"))
+
         known = {f.name for f in cls.__dataclass_fields__.values()} - {"extra"}
-        kwargs = {k: v for k, v in data.items() if k in known}
+        kwargs = {
+            k: v
+            for k, v in normalized.items()
+            if k in known and v is not None
+        }
         extra = {k: v for k, v in data.items() if k not in known}
         obj = cls(**kwargs)
         obj.extra = extra

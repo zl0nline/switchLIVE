@@ -12,4 +12,6 @@ venv/
 .ruff_cache/
 .pytest_cache/
 reports/
+logs/
+debug-bundles/
 *.log

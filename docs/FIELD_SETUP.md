@@ -140,6 +140,34 @@ Each completed run can be saved to:
 
 Reports are generated before any optional factory reset.
 
+## Debug mode and bug reports
+
+Use debug mode when a field run behaves unexpectedly:
+
+```bash
+switchlive --debug
+```
+
+Debug mode writes verbose logs to `logs/switchlive-YYYYMMDD-HHMMSS.log`,
+including console TX/RX chunks with common secrets masked.
+
+To collect files for a bug report:
+
+```bash
+switchlive --debug --bug-report
+```
+
+or choose `Собрать debug bundle` in the console menu. The bundle is written to
+`debug-bundles/` and includes:
+
+- environment summary;
+- sanitized config;
+- current debug log;
+- recent HTML/CSV reports.
+
+Passwords, enable passwords, tokens and API keys are masked before writing the
+bundle. Keep real credential files outside git and do not attach them manually.
+
 ## Windows notes
 
 The current MVP targets Linux workbenches. The code avoids Linux-only packaging

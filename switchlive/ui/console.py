@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 
 from switchlive.app.discovery import run_discovery
@@ -17,8 +16,10 @@ from switchlive.app.walk_test import (
     WalkTestEngine,
     WalkTestState,
 )
+from switchlive.config import Config
 from switchlive.core.credentials import Credentials
 from switchlive.core.models import PortVerdict
+from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
 
 ANSI = {
     "reset": "\033[0m",
@@ -45,6 +46,7 @@ def _print_menu() -> None:
     print("  2. ▶️  Начать тестирование")
     print("  3. 📋 История тестов")
     print("  4. ⚙️  Настройки")
+    print("  5. 🧰 Собрать debug bundle")
     print("  0. 🚪 Выход")
     print()
 
@@ -106,13 +108,14 @@ def _print_device_summary(result) -> None:
     print(f"     Авторизация:  {result.auth_method}")
 
 
-def show_start_menu() -> None:
+def show_start_menu(
+    config: Config | None = None,
+    config_path: str = "switchlive.json",
+    debug_context: DebugContext | None = None,
+) -> None:
     """Показать стартовое меню."""
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    config = config or Config()
+    debug_context = debug_context or configure_logging(debug=config.debug)
 
     _print_menu()
 
@@ -134,8 +137,26 @@ def show_start_menu() -> None:
             print("\n  ⚠️ История — ещё не реализовано (issue #14)\n")
         elif choice == "4":
             print("\n  ⚠️ Настройки — ещё не реализовано\n")
+        elif choice == "5":
+            _handle_debug_bundle(config, config_path, debug_context)
         else:
             print("\n  ❌ Неизвестная команда\n")
+
+
+def _handle_debug_bundle(
+    config: Config,
+    config_path: str,
+    debug_context: DebugContext,
+) -> None:
+    """Create a sanitized debug bundle for bug reports."""
+    bundle = collect_debug_bundle(
+        config=config,
+        config_path=config_path,
+        context=debug_context,
+    )
+    print()
+    print(_c("  [OK] Debug bundle собран", "green"))
+    print(f"     Файл: {bundle}")
 
 
 def _handle_test_menu() -> None:
