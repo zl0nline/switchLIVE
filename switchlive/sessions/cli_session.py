@@ -224,9 +224,9 @@ class CLISession(DeviceSession):
         time.sleep(0.1)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
-        chunk = redact_text(chunk)
-        self._transcript += chunk
-        log.debug("RX: %s", self._safe_text(chunk))
+        safe_chunk = self._safe_text(chunk)
+        self._transcript += safe_chunk
+        log.debug("RX: %s", safe_chunk)
         return chunk
 
     def _send_secret_and_read(self, secret: str, timeout: float) -> str:
@@ -237,9 +237,9 @@ class CLISession(DeviceSession):
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
         # В transcript пишем маскированную версию
-        chunk = self._safe_text(redact_text(chunk))
-        self._transcript += chunk
-        log.debug("RX: %s", chunk)
+        safe_chunk = self._safe_text(chunk)
+        self._transcript += safe_chunk
+        log.debug("RX: %s", safe_chunk)
         return chunk
 
     def _safe_text(self, text: str) -> str:

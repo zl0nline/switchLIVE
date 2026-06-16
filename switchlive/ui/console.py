@@ -19,6 +19,7 @@ from switchlive.app.walk_test import (
 from switchlive.config import Config
 from switchlive.core.credentials import Credentials
 from switchlive.core.models import PortVerdict
+from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
 
 ANSI = {
@@ -69,9 +70,9 @@ def _manual_credential_prompt(standard_creds: list[Credentials]) -> Credentials 
     return Credentials(username=username, password=password, enable_password=enable)
 
 
-def _handle_discovery() -> None:
+def _handle_discovery(config: Config) -> None:
     """Запуск автопоиска коммутатора."""
-    result = _run_discovery_wizard()
+    result = _run_discovery_wizard(config)
 
     print()
     if result.found and result.identity:
@@ -82,7 +83,7 @@ def _handle_discovery() -> None:
         print(_c("  [FAIL] Устройство не найдено", "red"))
 
 
-def _run_discovery_wizard():
+def _run_discovery_wizard(config: Config):
     """Run discovery with operator-friendly progress."""
     print()
     _section("Определение коммутатора")
@@ -91,7 +92,7 @@ def _run_discovery_wizard():
         print(f"  {_c('...', 'cyan')} {msg}")
 
     return run_discovery(
-        standard_logins_path="standart_login.txt",
+        standard_logins_path=config.standard_login_file,
         manual_credential_callback=_manual_credential_prompt,
         progress_callback=progress,
     )
@@ -130,11 +131,11 @@ def show_start_menu(
             print("  До свидания!")
             break
         elif choice == "1":
-            _handle_discovery()
+            _handle_discovery(config)
         elif choice == "2":
-            _handle_test_menu()
+            _handle_test_menu(config)
         elif choice == "3":
-            print("\n  ⚠️ История — ещё не реализовано (issue #14)\n")
+            print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
         elif choice == "4":
             print("\n  ⚠️ Настройки — ещё не реализовано\n")
         elif choice == "5":
@@ -159,10 +160,10 @@ def _handle_debug_bundle(
     print(f"     Файл: {bundle}")
 
 
-def _handle_test_menu() -> None:
+def _handle_test_menu(config: Config) -> None:
     """Walk-test wizard."""
     _section("Мастер тестирования")
-    discovery = _run_discovery_wizard()
+    discovery = _run_discovery_wizard(config)
     if not discovery.found or not discovery.adapter or not discovery.session:
         print(_c("  [FAIL] Сначала не удалось определить устройство", "red"))
         return
@@ -177,8 +178,8 @@ def _handle_test_menu() -> None:
         print("  Тест отменён оператором.")
         return
 
-    config = _configure_walk_test()
-    engine = WalkTestEngine(adapter, session, config)
+    test_config = _configure_walk_test(config)
+    engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
     results = engine.run(
@@ -189,22 +190,33 @@ def _handle_test_menu() -> None:
     _print_walk_summary(results)
 
 
-def _configure_walk_test() -> WalkTestConfig:
+def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
     """Collect walk-test settings from operator."""
+    config = config or Config()
     print()
     print(_c("  Настройка дополнительных тестов", "bold"))
 
     iperf_config = None
     run_traffic = False
     if check_iperf3_available():
-        server_ip = input("  IP iperf-сервера (Enter = пропустить): ").strip()
+        server_ip = _input_with_default(
+            "  IP iperf-сервера",
+            config.iperf_server_host or "",
+            empty_hint="пропустить",
+        )
         if server_ip:
-            server_port = 5201
+            server_port = config.iperf_server_port
             print(f"  Проверка {server_ip}:{server_port}...", end=" ")
             if check_server_reachable(server_ip, server_port):
                 print(_c("[OK]", "green"))
                 run_traffic = True
-                iperf_config = IperfConfig(server_host=server_ip, server_port=server_port)
+                iperf_config = IperfConfig(
+                    server_host=server_ip,
+                    server_port=server_port,
+                    duration_sec=config.iperf_duration,
+                    min_throughput_mbps=config.iperf_min_throughput_mbps,
+                    max_loss_percent=config.iperf_max_loss_percent,
+                )
             else:
                 print(_c("[WARN]", "yellow"))
                 print("  iperf пропущен: сервер недоступен или iperf3 -s не запущен.")
@@ -214,10 +226,24 @@ def _configure_walk_test() -> WalkTestConfig:
     poe_camera_ip = input("  IP PoE-камеры (Enter = проверять только питание): ").strip()
 
     return WalkTestConfig(
+        timeout_policy=TimeoutPolicy(
+            base=config.link_timeout_sec,
+            poe=config.poe_timeout_sec,
+            max=config.max_timeout_sec,
+        ),
         run_traffic=run_traffic,
         iperf_config=iperf_config,
         poe_camera_ip=poe_camera_ip,
     )
+
+
+def _input_with_default(prompt: str, default: str, empty_hint: str = "") -> str:
+    """Read input and use config default when present."""
+    if default:
+        answer = input(f"{prompt} [{default}]: ").strip()
+        return answer or default
+    suffix = f" (Enter = {empty_hint})" if empty_hint else ""
+    return input(f"{prompt}{suffix}: ").strip()
 
 
 def _make_walk_progress(total_ports: int):

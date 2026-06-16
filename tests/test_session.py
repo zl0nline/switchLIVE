@@ -294,6 +294,21 @@ class TestCLISession:
         assert result.success is True
         assert "Version 1.0" in result.output
 
+    def test_run_command_returns_raw_output_but_redacts_transcript(self):
+        """Diagnostic redaction must not mutate command output used by parsers."""
+        t = MockTransport()
+        t.add_response(b"switch:>")  # initial prompt
+        t.add_response(b"password: secret123\nswitch:>")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        session.login(Credentials())
+
+        result = session.run_command("show running-config")
+        assert "password: secret123" in result.output
+        assert "secret123" not in session.transcript
+        assert "password: ***" in session.transcript
+
     def test_run_command_with_pager(self):
         """Команда с пейджером — автоматически пролистывается."""
         t = MockTransport()
@@ -331,6 +346,22 @@ class TestCLISession:
         masked = session._safe_text("Password: secret123")
         assert "secret123" not in masked
         assert "***" in masked
+
+    def test_safe_text_masks_network_cli_password_forms(self):
+        t = MockTransport()
+        session = CLISession(t)
+        masked = session._safe_text(
+            "\n".join(
+                [
+                    "enable password 7 enableSecret",
+                    "username admin password adminSecret",
+                    "snmp-server community publicSecret RO",
+                ]
+            )
+        )
+        assert "enableSecret" not in masked
+        assert "adminSecret" not in masked
+        assert "publicSecret" not in masked
 
     def test_transcript_masks_secrets(self):
         """В transcript пароли маскируются, не хранятся открыто."""

@@ -45,6 +45,10 @@ def redact_text(text: str) -> str:
         r"(?i)(secret[ \t]*[:=][ \t]*)[^\s\r\n]+",
         r"(?i)(token[ \t]*[:=][ \t]*)[^\s\r\n]+",
         r"(?i)(api[_ -]?key[ \t]*[:=][ \t]*)[^\s\r\n]+",
+        r"(?im)^([ \t]*enable[ \t]+password(?:[ \t]+\d+)?[ \t]+)[^\s\r\n]+",
+        r"(?im)^([ \t]*username[ \t]+\S+[ \t]+password(?:[ \t]+\d+)?[ \t]+)[^\s\r\n]+",
+        r"(?im)^([ \t]*snmp-server[ \t]+community[ \t]+)[^\s\r\n]+",
+        r"(?im)^([ \t]*community[ \t]+)[^\s\r\n]+",
     )
     redacted = text
     for pattern in patterns:
@@ -117,7 +121,6 @@ def collect_debug_bundle(
         )
         _write_text_file(archive, ctx.log_file, "logs")
         _write_recent_files(archive, Path(config.report_dir), "reports", ("*.html", "*.csv"))
-        _write_text_file(archive, Path(config.db_path), "history")
 
     logging.getLogger(__name__).info("Debug bundle created: %s", bundle_path)
     return bundle_path

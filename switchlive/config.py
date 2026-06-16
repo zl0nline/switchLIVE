@@ -16,10 +16,13 @@ class Config:
     iperf_server_host: str | None = None
     iperf_server_port: int = 5201
     iperf_duration: int = 10
+    iperf_min_throughput_mbps: float = 50.0
+    iperf_max_loss_percent: float = 5.0
 
     # Настройки тестирования
     link_timeout_sec: int = 30
     poe_timeout_sec: int = 180
+    max_timeout_sec: int = 600
 
     # Файлы
     standard_login_file: str = "standart_login.txt"
@@ -40,10 +43,13 @@ class Config:
             normalized.setdefault("iperf_server_host", iperf.get("server_host"))
             normalized.setdefault("iperf_server_port", iperf.get("server_port"))
             normalized.setdefault("iperf_duration", iperf.get("duration_sec"))
+            normalized.setdefault("iperf_min_throughput_mbps", iperf.get("min_throughput_mbps"))
+            normalized.setdefault("iperf_max_loss_percent", iperf.get("max_loss_percent"))
         if isinstance(data.get("timeouts"), dict):
             timeouts = data["timeouts"]
             normalized.setdefault("link_timeout_sec", timeouts.get("link_sec"))
             normalized.setdefault("poe_timeout_sec", timeouts.get("poe_sec"))
+            normalized.setdefault("max_timeout_sec", timeouts.get("max_sec"))
         if isinstance(data.get("reports"), dict):
             reports = data["reports"]
             normalized.setdefault("report_dir", reports.get("report_dir"))
