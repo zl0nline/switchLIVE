@@ -147,3 +147,44 @@ class TestWalkTestWithContractAdapter:
         assert len(results) == 2
         # Оба порта shutdown
         assert adapter.shutdown_port.call_count == 2
+
+    def test_baseline_taken_once_empty(self):
+        """Регрессия: пустой baseline не должен пересниматься.
+
+        Сценарий @albedo: baseline пустой, тестовый MAC один и тот же.
+        Без sentinel-фикса baseline переснимается на 2-м порту,
+        и delta ломается из-за stale FDB.
+        """
+        ports = [
+            PortInfo(index=1, name="1", type=PortType.COPPER),
+            PortInfo(index=2, name="2", type=PortType.COPPER),
+        ]
+        # baseline пустой → снимается один раз
+        # port 1: MAC AA на порту 1 (stale FDB)
+        # port 2: MAC AA переезжает на порт 2 (new delta vs baseline)
+        mac_seq = [
+            # baseline: пусто
+            [],
+            # port 1 detect: MAC на порту 1
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            # port 2 detect: тот же MAC теперь на порту 2
+            # (stale на порту 1 тоже может быть, но port 1 уже shutdown)
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
+        ]
+        adapter = _make_contract_adapter(ports=ports, counters={})
+        adapter.get_mac_table.side_effect = mac_seq
+        session = MagicMock()
+
+        engine = WalkTestEngine(adapter, session)
+        results = engine.run(ports=ports, progress_callback=lambda s, m: None)
+
+        assert len(results) == 2
+        # Оба порта PASS — baseline не переснят, delta работает
+        assert results[0].verdict == PortVerdict.PASS
+        assert results[1].verdict == PortVerdict.PASS
+        # shutdown_port вызван дважды
+        assert adapter.shutdown_port.call_count == 2

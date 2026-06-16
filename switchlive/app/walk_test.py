@@ -23,7 +23,7 @@ from switchlive.app.port_detection import (
     detect_active_port_with_retry,
     take_mac_baseline,
 )
-from switchlive.core.models import PortInfo, PortType, PortVerdict
+from switchlive.core.models import MacEntry, PortInfo, PortType, PortVerdict
 from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.devices.base import DeviceAdapter, DeviceSession
 
@@ -101,7 +101,7 @@ class WalkTestEngine:
         self.state: WalkTestState = WalkTestState.INIT
         self.results: list[PortTestResult] = []
         self.shutdown_ports: set[int] = set()
-        self._baseline: dict = {}
+        self._baseline: dict[str, MacEntry] | None = None  # sentinel: None = not taken yet
 
     def run(
         self,
@@ -161,8 +161,8 @@ class WalkTestEngine:
         """Полный цикл тестирования одного порта."""
         result = PortTestResult(port=port)
 
-        # 1. Baseline MAC (первый раз)
-        if not self._baseline:
+        # 1. Baseline MAC (один раз)
+        if self._baseline is None:
             self.state = WalkTestState.BASELINE
             self._baseline = take_mac_baseline(self.adapter, self.session)
             _progress(WalkTestState.BASELINE, f"Baseline MAC: {len(self._baseline)} записей")
