@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from switchlive.core.models import DeviceIdentity, PortInfo
+from switchlive.core.models import DeviceIdentity, MacEntry, PortInfo
 from switchlive.devices.base import DeviceAdapter, DeviceProfile, DeviceSession
 from switchlive.devices.dlink.parsers import (
     parse_counters,
@@ -59,9 +59,14 @@ class DLinkAdapter(DeviceAdapter):
         """
         return self._profile.ports
 
-    def get_mac_table(self, session: DeviceSession) -> list[tuple[int, str]]:
+    def get_mac_table(self, session: DeviceSession) -> list[MacEntry]:
         result = session.run_command(self._profile.show_macs_cmd)
-        return parse_mac_table(result.output)
+        raw = parse_mac_table(result.output)
+        # Конвертируем tuple в MacEntry
+        return [
+            MacEntry(mac=mac, port_index=port_idx)
+            for port_idx, mac in raw
+        ]
 
     def get_counters(self, session: DeviceSession, port: PortInfo) -> dict[str, int]:
         cmd = self._profile.show_counters_cmd.format(port=port.name)

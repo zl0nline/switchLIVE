@@ -1,1 +1,1 @@
-"""Application services: discovery, test runner, finalization (заглушки — issues #5, #8, #15)."""
+"""Application services: discovery, port detection, test runner."""
