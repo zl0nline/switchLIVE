@@ -13,6 +13,8 @@ from switchlive.core.credentials import Credentials
 from switchlive.core.models import DeviceIdentity
 from switchlive.devices.dlink.adapter import DLinkAdapter
 from switchlive.devices.dlink.detector import DLinkDetector
+from switchlive.devices.eltex.adapter import EltexAdapter
+from switchlive.devices.eltex.detector import EltexDetector
 from switchlive.devices.registry import get_all_detectors, list_detector_vendors
 from switchlive.sessions.cli_session import CLISession
 from tests.test_transport import MockTransport
@@ -23,10 +25,15 @@ class TestDetectorRegistry:
         vendors = list_detector_vendors()
         assert "dlink" in vendors
 
+    def test_eltex_detector_registered(self):
+        vendors = list_detector_vendors()
+        assert "eltex" in vendors
+
     def test_get_all_detectors(self):
         detectors = get_all_detectors()
         assert len(detectors) >= 1
         assert any(isinstance(d, DLinkDetector) for d in detectors)
+        assert any(isinstance(d, EltexDetector) for d in detectors)
 
 
 class TestDLinkDetector:
@@ -88,6 +95,12 @@ class TestCreateAdapter:
         adapter = _create_adapter(ident)
         assert isinstance(adapter, DLinkAdapter)
         assert adapter.profile.model == "DES-1228"
+
+    def test_create_eltex_adapter(self):
+        ident = DeviceIdentity(vendor="Eltex", model="MES2324FB")
+        adapter = _create_adapter(ident)
+        assert isinstance(adapter, EltexAdapter)
+        assert adapter.profile.model == "MES2324FB"
 
     def test_create_unknown_vendor(self):
         ident = DeviceIdentity(vendor="Unknown", model="XYZ")

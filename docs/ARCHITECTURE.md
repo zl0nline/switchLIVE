@@ -12,7 +12,7 @@ results, and report them.
 
 - Keep serial/SSH/Telnet access separate from device logic.
 - Keep prompt/login/paging handling separate from test logic.
-- Make D-Link switch support the first adapter, not the architecture center.
+- Make vendor support adapter-based; D-Link was first, Eltex is now added.
 - Make test plans reusable for future device classes.
 - Keep the MVP small: Python 3, minimal dependencies, clear module boundaries.
 
@@ -117,7 +117,7 @@ Adapters implement behavior:
 - shutdown/no shutdown ports;
 - factory reset/reload.
 
-D-Link models from `SUPPORTED.md` should be grouped into families when commands
+Vendor models from `SUPPORTED.md` should be grouped into families when commands
 and parsers are compatible.
 
 ### Normalized Device Model
@@ -311,5 +311,6 @@ class TestStep:
 
 - Architecture document exists.
 - Core layers and boundaries are described.
-- D-Link is treated as the first adapter, not as hardcoded core logic.
+- Vendor support is adapter-based: D-Link was first, Eltex is added through
+  `devices/eltex`.
 - Future console-controlled devices have a clear extension path.
