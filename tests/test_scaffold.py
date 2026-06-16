@@ -74,4 +74,6 @@ def test_config_defaults():
     from switchlive.config import Config
     cfg = Config()
     assert cfg.iperf_server_port == 5201
+    assert cfg.iperf_min_throughput_mbps == 50.0
+    assert cfg.max_timeout_sec == 600
     assert cfg.debug is False

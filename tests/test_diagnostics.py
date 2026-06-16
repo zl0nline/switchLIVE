@@ -16,13 +16,25 @@ from switchlive.diagnostics import (
 
 
 def test_redact_text_masks_common_secrets():
-    text = "password: hunter2\nenable_password=supersecret\ntoken = abc123"
+    text = "\n".join(
+        [
+            "password: hunter2",
+            "enable_password=supersecret",
+            "token = abc123",
+            "enable password 7 enableSecret",
+            "username admin password adminSecret",
+            "snmp-server community publicSecret RO",
+        ]
+    )
 
     redacted = redact_text(text)
 
     assert "hunter2" not in redacted
     assert "supersecret" not in redacted
     assert "abc123" not in redacted
+    assert "enableSecret" not in redacted
+    assert "adminSecret" not in redacted
+    assert "publicSecret" not in redacted
     assert "password: ***" in redacted
 
 
@@ -47,7 +59,7 @@ def test_config_loads_nested_example_shape(tmp_path):
             {
                 "iperf": {"server_host": "192.0.2.10", "server_port": 5202},
                 "reports": {"report_dir": "out", "db_path": "history.sqlite"},
-                "timeouts": {"link_sec": 11, "poe_sec": 22},
+                "timeouts": {"link_sec": 11, "poe_sec": 22, "max_sec": 333},
                 "debug": True,
             }
         ),
@@ -62,6 +74,7 @@ def test_config_loads_nested_example_shape(tmp_path):
     assert config.db_path == "history.sqlite"
     assert config.link_timeout_sec == 11
     assert config.poe_timeout_sec == 22
+    assert config.max_timeout_sec == 333
     assert config.debug is True
 
 
@@ -81,12 +94,14 @@ def test_configure_logging_writes_redacted_debug_log(tmp_path):
 def test_collect_debug_bundle_sanitizes_config_log_and_reports(tmp_path):
     config_path = tmp_path / "switchlive.json"
     report_dir = tmp_path / "reports"
+    db_path = tmp_path / "history.sqlite"
     report_dir.mkdir()
+    db_path.write_bytes(b"sqlite-binary")
     (report_dir / "report.html").write_text("password: reportsecret", encoding="utf-8")
     config_path.write_text(
         json.dumps(
             {
-                "reports": {"report_dir": str(report_dir), "db_path": str(tmp_path / "history.sqlite")},
+                "reports": {"report_dir": str(report_dir), "db_path": str(db_path)},
                 "password": "configsecret",
             }
         ),
@@ -110,6 +125,7 @@ def test_collect_debug_bundle_sanitizes_config_log_and_reports(tmp_path):
         assert "config.sanitized.json" in names
         assert any(name.startswith("logs/") for name in names)
         assert "reports/report.html" in names
+        assert not any(name.startswith("history/") for name in names)
         combined = "\n".join(
             archive.read(name).decode("utf-8")
             for name in names

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from switchlive.config import Config
 from switchlive.core.models import PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
     _configure_walk_test,
     _format_port_result,
     _progress_bar,
+    _run_discovery_wizard,
     _verdict_label,
 )
 
@@ -40,6 +42,14 @@ class TestConsoleFormatting:
 
 
 class TestConfigureWalkTest:
+    @patch("switchlive.ui.console.run_discovery")
+    def test_discovery_uses_config_login_file(self, run_discovery):
+        config = Config(standard_login_file="custom-login.txt")
+
+        _run_discovery_wizard(config)
+
+        assert run_discovery.call_args.kwargs["standard_logins_path"] == "custom-login.txt"
+
     @patch("switchlive.ui.console.check_iperf3_available", return_value=False)
     @patch("builtins.input", return_value="")
     def test_no_iperf_available(self, _input, _available):
@@ -55,4 +65,32 @@ class TestConfigureWalkTest:
         cfg = _configure_walk_test()
         assert cfg.run_traffic is True
         assert cfg.iperf_config.server_host == "192.0.2.10"
+        assert cfg.poe_camera_ip == "192.0.2.20"
+
+    @patch("switchlive.ui.console.check_server_reachable", return_value=True)
+    @patch("switchlive.ui.console.check_iperf3_available", return_value=True)
+    @patch("builtins.input", side_effect=["", "192.0.2.20"])
+    def test_uses_config_defaults(self, _input, _available, _reachable):
+        config = Config(
+            iperf_server_host="192.0.2.30",
+            iperf_server_port=5202,
+            iperf_duration=7,
+            iperf_min_throughput_mbps=100.0,
+            iperf_max_loss_percent=1.5,
+            link_timeout_sec=12,
+            poe_timeout_sec=34,
+            max_timeout_sec=56,
+        )
+
+        cfg = _configure_walk_test(config)
+
+        assert cfg.run_traffic is True
+        assert cfg.iperf_config.server_host == "192.0.2.30"
+        assert cfg.iperf_config.server_port == 5202
+        assert cfg.iperf_config.duration_sec == 7
+        assert cfg.iperf_config.min_throughput_mbps == 100.0
+        assert cfg.iperf_config.max_loss_percent == 1.5
+        assert cfg.timeout_policy.base == 12
+        assert cfg.timeout_policy.poe == 34
+        assert cfg.timeout_policy.max == 56
         assert cfg.poe_camera_ip == "192.0.2.20"
