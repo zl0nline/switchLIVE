@@ -54,7 +54,8 @@ def test_import_session():
 
 def test_import_prompts():
     mod = importlib.import_module("switchlive.sessions.prompts")
-    assert hasattr(mod, "match_command_prompt")
+    assert hasattr(mod, "find_command_prompt")
+    assert hasattr(mod, "match_login_prompt")
 
 
 def test_import_device_registry():

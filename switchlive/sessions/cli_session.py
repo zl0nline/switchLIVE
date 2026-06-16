@@ -1,23 +1,44 @@
-"""Интерактивная CLI-сессия поверх serial/SSH транспорта."""
+"""Интерактивная CLI-сессия поверх serial/SSH транспорта.
+
+Login flow — state-machine по свежему output chunk:
+  INIT → (send newline) → читаем chunk
+  → LOGIN_PROMPT? → отправляем username → читаем chunk
+  → PASSWORD_PROMPT? → отправляем password → читаем chunk
+  → COMMAND_PROMPT? → готово
+  → PASSWORD_PROMPT снова? → enable password → читаем chunk
+  → COMMAND_PROMPT? → готово
+  → LOGIN_FAILED? → SessionError
+
+Важно: на каждом шаге смотрим только свежий chunk (последнюю строку),
+а не весь накопленный transcript. Transcript хранится отдельно для диагностики.
+"""
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from switchlive.core.credentials import Credentials
 from switchlive.core.errors import SessionError
 from switchlive.core.models import CommandResult
 from switchlive.sessions.base import DeviceSession
-from switchlive.sessions.pager import detect_pager, pager_response
+from switchlive.sessions.pager import (
+    detect_pager,
+    pager_space,
+    strip_pager_artifacts,
+)
 from switchlive.sessions.prompts import (
-    match_command_prompt,
-    match_login_prompt,
-    match_password_prompt,
+    contains_login_failed,
+    find_command_prompt_current,
+    match_login_current,
+    match_password_current,
 )
 from switchlive.transports.base import CommandTransport
 
 log = logging.getLogger(__name__)
+
+MAX_PAGER_ITERATIONS = 100
 
 
 class CLISession(DeviceSession):
@@ -35,86 +56,192 @@ class CLISession(DeviceSession):
         self.prompt_timeout = prompt_timeout
         self.command_timeout = command_timeout
         self._prompt: str | None = None
+        self._username: str = ""
+        self._transcript: str = ""  # полный лог сессии (для диагностики)
+
+    @property
+    def prompt(self) -> str | None:
+        return self._prompt
+
+    @property
+    def transcript(self) -> str:
+        """Полный вывод сессии — для диагностики."""
+        return self._transcript
 
     def login(self, credentials: Credentials) -> bool:
-        """Попробовать войти. Возвращает True при успехе."""
-        try:
-            # Сброс — отправить Enter
-            self.transport.write(b"\r\n")
-            output = self.transport.read_until_idle(self.prompt_timeout)
+        """State-machine логин по свежим чанкам вывода.
 
-            text = output.decode(errors="replace")
+        Returns True при успехе.
+        Raises SessionError при невозможности войти.
+        """
+        self._username = credentials.username
+        self._transcript = ""
+
+        try:
+            # Шаг 1: «подёргать» — отправить Enter, получить первый чанк
+            chunk = self._send_and_read(b"\r\n", self.prompt_timeout)
 
             # Уже в командном режиме?
-            prompt = match_command_prompt(text, self.vendor)
+            prompt = find_command_prompt_current(chunk, self.vendor)
             if prompt:
                 self._prompt = prompt
-                log.debug("Already at command prompt: %s", prompt)
+                log.info("Already at command prompt: %s", prompt)
                 return True
 
-            # Логин?
-            if match_login_prompt(text):
-                self.transport.write(credentials.username.encode() + b"\r\n")
-                output = self.transport.read_until_idle(self.prompt_timeout)
-                text = output.decode(errors="replace")
+            # Шаг 2: login prompt?
+            if match_login_current(chunk):
+                chunk = self._send_and_read(
+                    credentials.username.encode() + b"\r\n",
+                    self.prompt_timeout,
+                )
+            # Шаг 3: password prompt?
+            if match_password_current(chunk):
+                chunk = self._send_secret_and_read(
+                    credentials.password,
+                    self.prompt_timeout,
+                )
 
-            # Пароль?
-            if match_password_prompt(text):
-                self.transport.write(credentials.password.encode() + b"\r\n")
-                output = self.transport.read_until_idle(self.prompt_timeout)
-                text = output.decode(errors="replace")
+            # Проверить login failed
+            if contains_login_failed(self._transcript):
+                raise SessionError(
+                    f"Авторизация не удалась (пользователь: {credentials.username})"
+                )
 
-            # Enable mode?
-            if match_password_prompt(text):
+            # Уже командный промпт?
+            prompt = find_command_prompt_current(chunk, self.vendor)
+            if prompt:
+                self._prompt = prompt
+                log.info(
+                    "Login successful: user=%s prompt=%s",
+                    credentials.username,
+                    prompt,
+                )
+                return True
+
+            # Шаг 4: enable password prompt?
+            if match_password_current(chunk):
                 if credentials.enable_password:
-                    self.transport.write(credentials.enable_password.encode() + b"\r\n")
-                    output = self.transport.read_until_idle(self.prompt_timeout)
-                    text = output.decode(errors="replace")
+                    chunk = self._send_secret_and_read(
+                        credentials.enable_password,
+                        self.prompt_timeout,
+                    )
                 else:
                     raise SessionError("Требуется enable password")
 
-            prompt = match_command_prompt(text, self.vendor)
+            # Финальная проверка промпта
+            prompt = find_command_prompt_current(chunk, self.vendor)
             if prompt:
                 self._prompt = prompt
-                log.info("Login successful, prompt: %s", prompt)
+                log.info(
+                    "Login successful (enable): user=%s prompt=%s",
+                    credentials.username,
+                    prompt,
+                )
                 return True
 
-            raise SessionError(f"Не удалось определить промпт после логина. Вывод: {text[:200]}")
+            # Login failed после enable?
+            if contains_login_failed(self._transcript):
+                raise SessionError(
+                    f"Авторизация не удалась (пользователь: {credentials.username})"
+                )
 
+            if match_password_current(chunk):
+                raise SessionError("Не удалось войти — возможно неверный пароль")
+
+            raise SessionError(
+                f"Не удалось определить промпт после логина. "
+                f"Последний вывод: {self._safe_text(chunk)[:200]}"
+            )
+
+        except SessionError:
+            raise
         except Exception as e:
-            if isinstance(e, SessionError):
-                raise
             raise SessionError(f"Ошибка при логине: {e}") from e
 
-    def run_command(self, command: str, timeout: float | None = None) -> CommandResult:
-        """Выполнить команду, обработать пейджер, собрать вывод."""
+    def run_command(
+        self, command: str, timeout: float | None = None
+    ) -> CommandResult:
+        """Выполнить команду, обработать пейджер, собрать вывод.
+
+        Returns CommandResult с полным выводом.
+        """
         if not self._prompt:
             raise SessionError("Сессия не готова: нет промпта")
 
         to = timeout or self.command_timeout
 
         # Отправить команду
-        self.transport.write(command.encode() + b"\r\n")
-
-        # Собрать вывод
-        output = self.transport.read_until_idle(to)
-        text = output.decode(errors="replace")
+        chunk = self._send_and_read(
+            command.encode() + b"\r\n", to
+        )
 
         # Обработка пейджера
-        attempts = 0
-        while detect_pager(text) and attempts < 50:
-            self.transport.write(pager_response())
-            time.sleep(0.3)
-            more = self.transport.read_until_idle(to)
-            text += more.decode(errors="replace")
-            attempts += 1
+        iterations = 0
+        while detect_pager(chunk) and iterations < MAX_PAGER_ITERATIONS:
+            more = self._send_and_read(pager_space(), to)
+            if not more.strip():
+                break
+            chunk += more
+            iterations += 1
+
+        if iterations >= MAX_PAGER_ITERATIONS:
+            log.warning(
+                "Pager iterations limit reached for command: %s",
+                command[:50],
+            )
+
+        # Очистить артефакты пейджера
+        chunk = strip_pager_artifacts(chunk)
 
         # Проверить промпт в конце
-        prompt = match_command_prompt(text, self.vendor)
+        prompt = find_command_prompt_current(chunk, self.vendor)
         if not prompt:
-            log.warning("Команда завершена без промпта: %s", command[:50])
+            log.warning(
+                "Command completed without prompt: %s",
+                command[:50],
+            )
 
-        return CommandResult(output=text, success=True)
+        return CommandResult(output=chunk, success=True)
+
+    def disable_paging(self, command: str = "") -> None:
+        """Отправить команду для отключения пейджера.
+
+        Вендор-специфичная команда передаётся через аргумент.
+        Например для D-Link: 'disable clipaging'
+        """
+        if command:
+            self.run_command(command)
 
     def is_ready(self) -> bool:
         return self._prompt is not None
+
+    # --- Внутренние методы ---
+
+    def _send_and_read(self, data: bytes, timeout: float) -> str:
+        """Отправить байты, прочитать ответ, добавить в transcript, вернуть chunk."""
+        self.transport.write(data)
+        time.sleep(0.1)
+        raw = self.transport.read_until_idle(timeout)
+        chunk = raw.decode(errors="replace")
+        self._transcript += chunk
+        return chunk
+
+    def _send_secret_and_read(self, secret: str, timeout: float) -> str:
+        """Отправить пароль (без попадания в логи), прочитать ответ."""
+        self.transport.write(secret.encode() + b"\r\n")
+        time.sleep(0.3)
+        raw = self.transport.read_until_idle(timeout)
+        chunk = raw.decode(errors="replace")
+        # В transcript пишем маскированную версию
+        self._transcript += re.sub(
+            r"(?i)(password\s*:?\s*)\S+", r"\1***", chunk
+        )
+        return chunk
+
+    def _safe_text(self, text: str) -> str:
+        """Маскировать потенциальные пароли в тексте для логов."""
+        return re.sub(
+            r"(?i)(password\s*:?\s*)\S+",
+            r"\1***",
+            text,
+        )
