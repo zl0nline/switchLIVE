@@ -34,7 +34,7 @@ python -m switchlive
 
 ## Конфигурация
 
-См. `configs/switchlive.example.yaml`.
+См. `configs/switchlive.example.json`.
 
 ## Архитектура
 
