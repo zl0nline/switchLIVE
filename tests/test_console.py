@@ -1,0 +1,58 @@
+"""Tests for operator console helpers (#13)."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+from switchlive.core.models import PortInfo, PortType, PortVerdict
+from switchlive.ui.console import (
+    _configure_walk_test,
+    _format_port_result,
+    _progress_bar,
+    _verdict_label,
+)
+
+
+def _strip_ansi(text: str) -> str:
+    import re
+
+    return re.sub(r"\033\[[0-9;]*m", "", text)
+
+
+class TestConsoleFormatting:
+    def test_progress_bar(self):
+        assert _progress_bar(0, 4).endswith("0/4")
+        assert _progress_bar(2, 4).endswith("2/4")
+        assert _progress_bar(5, 4).endswith("4/4")
+
+    def test_verdict_label(self):
+        assert "[OK]" in _verdict_label(PortVerdict.PASS)
+        assert "[WARN]" in _verdict_label(PortVerdict.WARN)
+        assert "[FAIL]" in _verdict_label(PortVerdict.FAIL)
+
+    def test_format_port_result(self):
+        result = MagicMock()
+        result.verdict = PortVerdict.PASS
+        result.port = PortInfo(index=25, name="25", type=PortType.SFP_PLUS)
+        text = _strip_ansi(_format_port_result(result))
+        assert "Порт 25" in text
+        assert "sfp_plus" in text
+
+
+class TestConfigureWalkTest:
+    @patch("switchlive.ui.console.check_iperf3_available", return_value=False)
+    @patch("builtins.input", return_value="")
+    def test_no_iperf_available(self, _input, _available):
+        cfg = _configure_walk_test()
+        assert cfg.run_traffic is False
+        assert cfg.iperf_config is None
+        assert cfg.poe_camera_ip == ""
+
+    @patch("switchlive.ui.console.check_server_reachable", return_value=True)
+    @patch("switchlive.ui.console.check_iperf3_available", return_value=True)
+    @patch("builtins.input", side_effect=["192.0.2.10", "192.0.2.20"])
+    def test_iperf_and_poe_camera(self, _input, _available, _reachable):
+        cfg = _configure_walk_test()
+        assert cfg.run_traffic is True
+        assert cfg.iperf_config.server_host == "192.0.2.10"
+        assert cfg.poe_camera_ip == "192.0.2.20"
