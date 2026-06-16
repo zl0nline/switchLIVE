@@ -79,6 +79,7 @@ class WalkTestConfig:
 
     # PoE
     run_poe: bool = True
+    poe_camera_ip: str = ""  # IP PoE-камеры для проверки
 
     # SFP
     run_sfp: bool = True
@@ -224,16 +225,54 @@ class WalkTestEngine:
             result.verdict = PortVerdict.WARN
             result.notes.append(f"Counters error: {e}")
 
-        # 5. PoE тест (если поддерживается)
+        # 5. PoE тест (через нормализованный probe)
         if self.config.run_poe and port.supports_poe:
             self.state = WalkTestState.TEST_POE
             try:
-                # Адаптер может вернуть PoE статус
-                if hasattr(self.adapter, "get_poe_status"):
-                    poe = self.adapter.get_poe_status(self.session, port)
-                    if poe:
-                        result.notes.append(f"PoE: {poe}")
-                        _progress(WalkTestState.TEST_POE, f"PoE: {poe}")
+                from switchlive.app.poe import (
+                    PoEVerdict,
+                    evaluate_poe_verdict,
+                    probe_poe_status,
+                    wait_for_camera,
+                )
+
+                poe = probe_poe_status(self.adapter, self.session, port)
+                _progress(
+                    WalkTestState.TEST_POE,
+                    f"PoE state: {poe.state.value}, "
+                    f"power: {poe.power_w}W, class: {poe.poe_class}",
+                )
+
+                # Если питание есть и задан IP камеры — ждём загрузки
+                if poe.powered and self.config.poe_camera_ip:
+                    reachable, waited = wait_for_camera(
+                        self.config.poe_camera_ip,
+                        timeout=self.config.timeout_policy.poe,
+                        progress_callback=lambda m: _progress(
+                            WalkTestState.TEST_POE, m
+                        ),
+                    )
+                    poe.camera_ip = self.config.poe_camera_ip
+                    poe.boot_time_sec = waited
+
+                # Оценка независимого PoE-вердикта
+                poe = evaluate_poe_verdict(
+                    poe,
+                    camera_reachable=poe.camera_reachable,
+                )
+
+                result.notes.append(
+                    f"PoE: {poe.verdict.value} "
+                    f"({poe.state.value}, {poe.power_w}W)"
+                )
+
+                # PoE WARN/FAIL не обязательно понижает общий вердикт —
+                # это отдельная оценка, но фиксируем
+                if poe.verdict in (PoEVerdict.FAIL, PoEVerdict.WARN):
+                    if result.verdict == PortVerdict.PASS:
+                        result.verdict = PortVerdict.WARN
+                    result.notes.append(f"PoE detail: {'; '.join(poe.notes)}")
+
             except Exception as e:
                 result.notes.append(f"PoE check failed: {e}")
 
