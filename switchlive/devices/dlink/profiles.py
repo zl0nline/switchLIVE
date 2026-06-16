@@ -48,7 +48,7 @@ class DLinkDES12xx(DLinkBase):
     family = "DES-12xx"
 
     supports_poe = False
-    supports_sfp = False
+    supports_sfp = True
 
     @property
     def ports(self) -> list[PortInfo]:
@@ -58,8 +58,8 @@ class DLinkDES12xx(DLinkBase):
         ] + [
             PortInfo(index=25, name="25", speed_mbps=1000, media="copper", connector="RJ45", role="uplink"),
             PortInfo(index=26, name="26", speed_mbps=1000, media="copper", connector="RJ45", role="uplink"),
-            PortInfo(index=27, name="27", speed_mbps=1000, media="combo", connector="SFP", role="combo"),
-            PortInfo(index=28, name="28", speed_mbps=1000, media="combo", connector="SFP", role="combo"),
+            PortInfo(index=27, name="27", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
+            PortInfo(index=28, name="28", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
         ]
 
 
@@ -78,15 +78,27 @@ class DLinkDES32xx(DLinkBase):
             PortInfo(
                 index=i,
                 name=str(i),
-                speed_mbps=1000,
+                speed_mbps=100,
                 media="copper",
                 connector="RJ45",
             )
             for i in range(1, 9)
         ] + [
-            PortInfo(index=9, name="9", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
-            PortInfo(index=10, name="10", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
+            PortInfo(index=9, name="9", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
+            PortInfo(index=10, name="10", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
         ]
+
+
+class DLinkDES3200(DLinkDES32xx):
+    """DES-3200 alias profile."""
+
+    model = "DES-3200"
+
+
+class DLinkDES3200C1(DLinkDES32xx):
+    """DES-3200-C1 alias profile."""
+
+    model = "DES-3200-C1"
 
 
 class DLinkDES3028(DLinkBase):
@@ -102,7 +114,12 @@ class DLinkDES3028(DLinkBase):
     def ports(self) -> list[PortInfo]:
         return [
             PortInfo(index=i, name=str(i), speed_mbps=100, media="copper", connector="RJ45")
-            for i in range(1, 29)
+            for i in range(1, 25)
+        ] + [
+            PortInfo(index=25, name="25", speed_mbps=1000, media="copper", connector="RJ45", role="uplink"),
+            PortInfo(index=26, name="26", speed_mbps=1000, media="copper", connector="RJ45", role="uplink"),
+            PortInfo(index=27, name="27", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
+            PortInfo(index=28, name="28", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
         ]
 
 
@@ -121,8 +138,8 @@ class DLinkDES3526(DLinkBase):
             PortInfo(index=i, name=str(i), speed_mbps=100, media="copper", connector="RJ45")
             for i in range(1, 25)
         ] + [
-            PortInfo(index=25, name="25", speed_mbps=1000, media="combo", connector="SFP", role="combo"),
-            PortInfo(index=26, name="26", speed_mbps=1000, media="combo", connector="SFP", role="combo"),
+            PortInfo(index=25, name="25", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
+            PortInfo(index=26, name="26", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
         ]
 
 
@@ -141,11 +158,17 @@ class DLinkDGS1210(DLinkBase):
             PortInfo(index=i, name=str(i), speed_mbps=1000, media="copper", connector="RJ45")
             for i in range(1, 25)
         ] + [
-            PortInfo(index=25, name="25", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=26, name="26", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=27, name="27", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=28, name="28", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
+            PortInfo(index=25, name="25", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
+            PortInfo(index=26, name="26", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
+            PortInfo(index=27, name="27", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
+            PortInfo(index=28, name="28", speed_mbps=1000, media="sfp", connector="SFP", role="uplink"),
         ]
+
+
+class DLinkDGS1210SX(DLinkDGS1210):
+    """DGS-1210-28/SX alias profile."""
+
+    model = "DGS-1210-28/SX"
 
 
 class DLinkDGS3000(DLinkBase):
@@ -154,7 +177,7 @@ class DLinkDGS3000(DLinkBase):
     model = "DGS-3000-10"
     family = "DGS-3000"
 
-    supports_poe = True
+    supports_poe = False
     supports_sfp = True
 
     @property
@@ -166,12 +189,11 @@ class DLinkDGS3000(DLinkBase):
                 speed_mbps=1000,
                 media="copper",
                 connector="RJ45",
-                supports_poe=True,
             )
             for i in range(1, 9)
         ] + [
-            PortInfo(index=9, name="9", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=10, name="10", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
+            PortInfo(index=9, name="9", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
+            PortInfo(index=10, name="10", speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo"),
         ]
 
 
@@ -181,7 +203,7 @@ class DLinkDGS3100(DLinkBase):
     model = "DGS-3100-24/TC"
     family = "DGS-3100"
 
-    supports_poe = True
+    supports_poe = False
     supports_sfp = True
 
     @property
@@ -193,9 +215,11 @@ class DLinkDGS3100(DLinkBase):
                 speed_mbps=1000,
                 media="copper",
                 connector="RJ45",
-                supports_poe=True,
             )
-            for i in range(1, 25)
+            for i in range(1, 21)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(21, 25)
         ]
 
 
@@ -205,7 +229,7 @@ class DLinkDGS3120(DLinkBase):
     model = "DGS-3120-24/SC"
     family = "DGS-3120"
 
-    supports_poe = True
+    supports_poe = False
     supports_sfp = True
 
     @property
@@ -215,11 +239,13 @@ class DLinkDGS3120(DLinkBase):
                 index=i,
                 name=str(i),
                 speed_mbps=1000,
-                media="copper",
-                connector="RJ45",
-                supports_poe=True,
+                media="sfp",
+                connector="SFP",
             )
-            for i in range(1, 25)
+            for i in range(1, 17)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(17, 25)
         ]
 
 
@@ -229,12 +255,12 @@ class DLinkDGS36xx(DLinkBase):
     model = "DGS-3620/SC"
     family = "DGS-36xx"
 
-    supports_poe = True
+    supports_poe = False
     supports_sfp = True
     supports_dom = True
 
-    show_poe_cmd = "show ports {port} poe"
-    poe_enable_cmd = "config ports {port} poe state enable"
+    show_poe_cmd = ""
+    poe_enable_cmd = ""
 
     @property
     def ports(self) -> list[PortInfo]:
@@ -244,16 +270,21 @@ class DLinkDGS36xx(DLinkBase):
                 index=i,
                 name=str(i),
                 speed_mbps=1000,
-                media="copper",
-                connector="RJ45",
-                supports_poe=True,
+                media="sfp",
+                connector="SFP",
             )
-            for i in range(1, 25)
+            for i in range(1, 21)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(21, 25)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=10000, media="sfp_plus", connector="SFP+", role="uplink")
+            for i in range(25, 29)
         ]
 
 
 class DLinkDGS3612(DLinkDGS36xx):
-    """DGS-3612 — 8x1G + 4xSFP+."""
+    """DGS-3612 — 12x1G + 4xcombo SFP."""
 
     model = "DGS-3612"
 
@@ -266,19 +297,22 @@ class DLinkDGS3612(DLinkDGS36xx):
                 speed_mbps=1000,
                 media="copper",
                 connector="RJ45",
-                supports_poe=True,
             )
-            for i in range(1, 9)
+            for i in range(1, 13)
         ] + [
-            PortInfo(index=9, name="9", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=10, name="10", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=11, name="11", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=12, name="12", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(13, 17)
         ]
 
 
+class DLinkDGS3630SC(DLinkDGS36xx):
+    """DGS-3630/SC — same physical layout as DGS-3620-28SC."""
+
+    model = "DGS-3630/SC"
+
+
 class DLinkDGS3627(DLinkDGS36xx):
-    """DGS-3627 — 24x1G PoE + 4xSFP+."""
+    """DGS-3627 — 24x1G + 4xcombo SFP."""
 
     model = "DGS-3627"
 
@@ -291,14 +325,11 @@ class DLinkDGS3627(DLinkDGS36xx):
                 speed_mbps=1000,
                 media="copper",
                 connector="RJ45",
-                supports_poe=True,
             )
             for i in range(1, 25)
         ] + [
-            PortInfo(index=25, name="25", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=26, name="26", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=27, name="27", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=28, name="28", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(25, 29)
         ]
 
 
@@ -308,12 +339,12 @@ class DLinkDGS3420(DLinkBase):
     model = "DGS-3420/SC"
     family = "DGS-34xx"
 
-    supports_poe = True
+    supports_poe = False
     supports_sfp = True
     supports_dom = True
 
-    show_poe_cmd = "show ports {port} poe"
-    poe_enable_cmd = "config ports {port} poe state enable"
+    show_poe_cmd = ""
+    poe_enable_cmd = ""
 
     @property
     def ports(self) -> list[PortInfo]:
@@ -322,14 +353,16 @@ class DLinkDGS3420(DLinkBase):
                 index=i,
                 name=str(i),
                 speed_mbps=1000,
-                media="copper",
-                connector="RJ45",
-                supports_poe=True,
+                media="sfp",
+                connector="SFP",
             )
-            for i in range(1, 25)
+            for i in range(1, 21)
         ] + [
-            PortInfo(index=25, name="25", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
-            PortInfo(index=26, name="26", speed_mbps=10000, media="sfp", connector="SFP+", role="uplink"),
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(21, 25)
+        ] + [
+            PortInfo(index=25, name="25", speed_mbps=10000, media="sfp_plus", connector="SFP+", role="uplink"),
+            PortInfo(index=26, name="26", speed_mbps=10000, media="sfp_plus", connector="SFP+", role="uplink"),
         ]
 
 
@@ -343,17 +376,17 @@ MODEL_MAP: dict[str, type[DLinkBase]] = {
     "DES-3200-10": DLinkDES32xx,
     "DGS-3000-10": DLinkDGS3000,
     "DGS-1210-28/ME": DLinkDGS1210,
-    "DGS-1210-28/SX": DLinkDGS1210,
+    "DGS-1210-28/SX": DLinkDGS1210SX,
     "DGS-3100-24/TC": DLinkDGS3100,
     "DGS-3120-24/SC": DLinkDGS3120,
     "DGS-3612": DLinkDGS3612,
     "DGS-3620/SC": DLinkDGS36xx,
-    "DGS-3630/SC": DLinkDGS36xx,
+    "DGS-3630/SC": DLinkDGS3630SC,
     "DGS-3420/SC": DLinkDGS3420,
     "DGS-3627": DLinkDGS3627,
     # Редкие
-    "DES-3200": DLinkDES32xx,
-    "DES-3200-C1": DLinkDES32xx,
+    "DES-3200": DLinkDES3200,
+    "DES-3200-C1": DLinkDES3200C1,
     "DES-3028": DLinkDES3028,
     "DES-3526": DLinkDES3526,
 }

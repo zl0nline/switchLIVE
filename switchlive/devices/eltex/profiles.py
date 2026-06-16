@@ -23,8 +23,8 @@ class EltexBase(DeviceProfile):
     show_version_cmd = "show version"
     show_ports_cmd = "show interfaces status"
     show_macs_cmd = "show mac address-table"
-    show_counters_cmd = "show interfaces counters {port}"
-    show_transceiver_cmd = "show interfaces transceiver"
+    show_counters_cmd = "show interface counters {port}"
+    show_transceiver_cmd = "show fiber-ports optical-transceiver interface {port}"
     reload_cmd = "reload"
 
 
