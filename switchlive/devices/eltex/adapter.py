@@ -68,7 +68,7 @@ class EltexAdapter(DeviceAdapter):
     def get_transceiver(self, session: DeviceSession, port: PortInfo) -> dict[str, str]:
         if not self._profile.supports_sfp or not self._profile.show_transceiver_cmd:
             return {}
-        result = session.run_command(f"{self._profile.show_transceiver_cmd} {port.cli_name}")
+        result = session.run_command(self._profile.show_transceiver_cmd.format(port=port.cli_name))
         return parse_transceiver(result.output)
 
     def factory_reset(self, session: DeviceSession) -> None:

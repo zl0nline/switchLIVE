@@ -50,6 +50,11 @@ class TestEltexProfiles:
         assert isinstance(get_profile_for_model("MES2324FB AC"), EltexMES2324FB)
         assert get_profile_for_model("MES2308") is None
 
+    def test_mes_cli_commands(self):
+        profile = EltexMES2324B()
+        assert profile.show_counters_cmd == "show interface counters {port}"
+        assert profile.show_transceiver_cmd == "show fiber-ports optical-transceiver interface {port}"
+
 
 class TestEltexParsers:
     def test_parse_show_version(self):
@@ -159,6 +164,34 @@ class TestEltexAdapter:
         assert b"configure terminal" in written
         assert b"interface gigabitethernet 1/0/1" in written
         assert b"shutdown" in written
+
+    def test_counters_command(self):
+        transport = MockTransport()
+        transport.add_response(b"MES2324B#")
+        transport.add_response(b"CRC Errors: 2\nDrops: 0\nMES2324B#")
+        transport.open()
+        session = CLISession(transport, vendor="eltex")
+        session.login(Credentials())
+        adapter = EltexAdapter()
+
+        adapter.get_counters(session, adapter.profile.ports[0])
+
+        written = b"".join(transport.written)
+        assert b"show interface counters gigabitethernet 1/0/1" in written
+
+    def test_transceiver_command(self):
+        transport = MockTransport()
+        transport.add_response(b"MES2324B#")
+        transport.add_response(b"Vendor Name: FINISAR\nMES2324B#")
+        transport.open()
+        session = CLISession(transport, vendor="eltex")
+        session.login(Credentials())
+        adapter = EltexAdapter()
+
+        adapter.get_transceiver(session, adapter.profile.ports[24])
+
+        written = b"".join(transport.written)
+        assert b"show fiber-ports optical-transceiver interface tengigabitethernet 1/0/25" in written
 
     def test_factory_reset_unsupported(self):
         adapter = EltexAdapter()
