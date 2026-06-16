@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from switchlive.core.port_model import MacEntry, PortInfo
+from switchlive.core.models import MacEntry, PortInfo
 from switchlive.devices.base import DeviceAdapter, DeviceSession
 
 log = logging.getLogger(__name__)

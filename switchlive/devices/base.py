@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import abc
 
-from switchlive.core.models import DeviceIdentity, PortInfo
+from switchlive.core.models import DeviceIdentity, MacEntry, PortInfo
 from switchlive.sessions.base import DeviceSession
 
 
@@ -106,8 +106,8 @@ class DeviceAdapter(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def get_mac_table(self, session: DeviceSession) -> list[tuple[int, str]]:
-        """Возвращает [(port_index, mac_address), ...]"""
+    def get_mac_table(self, session: DeviceSession) -> list[MacEntry]:
+        """Возвращает список MacEntry: mac, port_index, vlan."""
 
     @abc.abstractmethod
     def get_counters(self, session: DeviceSession, port: PortInfo) -> dict[str, int]:

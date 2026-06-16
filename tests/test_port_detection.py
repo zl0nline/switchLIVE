@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from switchlive.core.port_model import MacEntry, PortInfo
-from switchlive.tests.port_detection import (
+from switchlive.app.port_detection import (
     detect_active_port,
     detect_active_port_with_retry,
     take_mac_baseline,
 )
+from switchlive.core.models import MacEntry, PortInfo
 
 
 def _make_adapter(mac_entries: list = None) -> MagicMock:

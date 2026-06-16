@@ -18,15 +18,14 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
-from switchlive.core.models import PortVerdict
-from switchlive.core.port_model import PortInfo, PortType
-from switchlive.core.timeouts import TimeoutPolicy
-from switchlive.devices.base import DeviceAdapter, DeviceSession
-from switchlive.tests.port_detection import (
+from switchlive.app.port_detection import (
     DetectionResult,
     detect_active_port_with_retry,
     take_mac_baseline,
 )
+from switchlive.core.models import PortInfo, PortType, PortVerdict
+from switchlive.core.timeouts import TimeoutPolicy
+from switchlive.devices.base import DeviceAdapter, DeviceSession
 
 log = logging.getLogger(__name__)
 

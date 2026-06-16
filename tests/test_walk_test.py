@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from switchlive.core.models import PortVerdict
-from switchlive.core.port_model import PortInfo, PortType
-from switchlive.tests.walk_test import (
+from switchlive.app.walk_test import (
     WalkTestConfig,
     WalkTestEngine,
     WalkTestState,
 )
+from switchlive.core.models import PortInfo, PortType, PortVerdict
 
 
 def _make_mock_adapter(ports=None, mac_table=None, counters=None,
@@ -103,7 +102,7 @@ class TestWalkTestEngine:
 
     def test_counters_clean_pass(self):
         """Чистые counters → PASS."""
-        from switchlive.core.port_model import MacEntry
+        from switchlive.core.models import MacEntry
 
         port = PortInfo(index=1, name="1", type=PortType.COPPER)
         # baseline: пусто, затем MAC появляется
@@ -127,7 +126,7 @@ class TestWalkTestEngine:
 
     def test_counters_with_errors_warn(self):
         """CRC/drops > 0 → WARN."""
-        from switchlive.core.port_model import MacEntry
+        from switchlive.core.models import MacEntry
 
         port = PortInfo(index=1, name="1", type=PortType.COPPER)
         mac_seq = [
@@ -164,7 +163,7 @@ class TestWalkTestEngine:
 
     def test_full_walk_test_run(self):
         """Полный прогон по 2 портам."""
-        from switchlive.core.port_model import MacEntry
+        from switchlive.core.models import MacEntry
 
         ports = [
             PortInfo(index=1, name="1", type=PortType.COPPER),
@@ -185,7 +184,7 @@ class TestWalkTestEngine:
 
     def test_poe_test_called_for_poe_port(self):
         """PoE тест вызывается для PoE-порта."""
-        from switchlive.core.port_model import MacEntry
+        from switchlive.core.models import MacEntry
 
         port = PortInfo(
             index=1, name="1", type=PortType.COPPER, supports_poe=True
@@ -212,7 +211,7 @@ class TestWalkTestEngine:
 
     def test_sfp_test_called_for_sfp_port(self):
         """SFP тест вызывается для SFP-порта."""
-        from switchlive.core.port_model import MacEntry
+        from switchlive.core.models import MacEntry
 
         port = PortInfo(index=9, name="9", type=PortType.SFP_PLUS)
         mac_seq = [

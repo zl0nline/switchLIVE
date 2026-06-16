@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from switchlive.core.port_model import (
+from switchlive.core.models import (
     AdminStatus,
     LinkStatus,
     MacEntry,
