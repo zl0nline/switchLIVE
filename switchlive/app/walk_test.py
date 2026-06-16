@@ -56,6 +56,7 @@ class PortTestResult:
     detection: DetectionResult | None = None
     counters: dict[str, int] = field(default_factory=dict)
     iperf_throughput: float = 0.0
+    sfp: object | None = None
 
 
 @dataclass
@@ -334,11 +335,29 @@ class WalkTestEngine:
         if self.config.run_sfp and port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO):
             self.state = WalkTestState.TEST_SFP
             try:
-                if hasattr(self.adapter, "get_transceiver"):
-                    sfp = self.adapter.get_transceiver(self.session, port)
-                    if sfp:
-                        result.notes.append(f"SFP: {sfp}")
-                        _progress(WalkTestState.TEST_SFP, f"SFP: {sfp}")
+                from switchlive.app.sfp import SfpVerdict, probe_sfp_status
+
+                sfp = probe_sfp_status(self.adapter, self.session, port)
+                result.sfp = sfp
+                result.notes.append(
+                    f"SFP: {sfp.verdict.value} "
+                    f"(vendor={sfp.vendor or 'unknown'}, "
+                    f"serial={sfp.serial or 'unknown'}, "
+                    f"rx={sfp.rx_power_dbm}, tx={sfp.tx_power_dbm}, "
+                    f"temp={sfp.temperature_c})"
+                )
+                _progress(
+                    WalkTestState.TEST_SFP,
+                    f"SFP: {sfp.verdict.value}, "
+                    f"vendor={sfp.vendor or 'unknown'}, "
+                    f"serial={sfp.serial or 'unknown'}",
+                )
+
+                if sfp.verdict in (SfpVerdict.FAIL, SfpVerdict.WARN):
+                    if result.verdict == PortVerdict.PASS:
+                        result.verdict = PortVerdict.WARN
+                    if sfp.notes:
+                        result.notes.append(f"SFP detail: {'; '.join(sfp.notes)}")
             except Exception as e:
                 result.notes.append(f"SFP check failed: {e}")
 
