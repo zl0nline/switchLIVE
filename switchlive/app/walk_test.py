@@ -244,6 +244,7 @@ class WalkTestEngine:
                 )
 
                 # Если питание есть и задан IP камеры — ждём загрузки
+                camera_reachable = None
                 if poe.powered and self.config.poe_camera_ip:
                     reachable, waited = wait_for_camera(
                         self.config.poe_camera_ip,
@@ -253,12 +254,14 @@ class WalkTestEngine:
                         ),
                     )
                     poe.camera_ip = self.config.poe_camera_ip
+                    poe.camera_reachable = reachable
                     poe.boot_time_sec = waited
+                    camera_reachable = reachable
 
                 # Оценка независимого PoE-вердикта
                 poe = evaluate_poe_verdict(
                     poe,
-                    camera_reachable=poe.camera_reachable,
+                    camera_reachable=camera_reachable,
                 )
 
                 result.notes.append(

@@ -51,7 +51,7 @@ class PoEResult:
     Не содержит vendor-специфичных строк.
     """
 
-    verdict: PoEVerdict = PoEVerdict.SKIP
+    verdict: PoEVerdict = PoEVerdict.WARN
     state: PoEState = PoEState.UNKNOWN
     enabled: bool = False       # PoE admin status
     powered: bool = False       # фактическая выдача питания
@@ -144,7 +144,7 @@ def wait_for_camera(
 
 def evaluate_poe_verdict(
     poe: PoEResult,
-    camera_reachable: bool = False,
+    camera_reachable: bool | None = None,
     poe_timeout_sec: float = 180.0,
 ) -> PoEResult:
     """Оценить итоговый PoE-вердикт.
@@ -174,8 +174,11 @@ def evaluate_poe_verdict(
         poe.notes.append("PoE включён, но питание не выдаётся")
         return poe
 
-    # Питание есть → проверяем камеру
-    if camera_reachable:
+    # Питание есть → проверяем камеру, если она настроена.
+    if camera_reachable is None:
+        poe.verdict = PoEVerdict.PASS
+        poe.notes.append("PoE питание подаётся")
+    elif camera_reachable:
         poe.verdict = PoEVerdict.PASS
         poe.camera_reachable = True
         poe.notes.append(f"Камера видна: {poe.camera_ip or 'OK'}")

@@ -13,7 +13,8 @@ from switchlive.app.poe import (
     probe_poe_status,
     wait_for_camera,
 )
-from switchlive.core.models import PortInfo
+from switchlive.app.walk_test import WalkTestConfig, WalkTestEngine
+from switchlive.core.models import MacEntry, PortInfo, PortVerdict
 
 
 class TestNormalizePoe:
@@ -147,6 +148,7 @@ class TestProbePoeStatus:
         port = PortInfo(index=1, name="1", supports_poe=True)
         adapter = self._make_adapter(poe_raw={"status": "ON", "power_w": "12.0"})
         result = probe_poe_status(adapter, MagicMock(), port)
+        assert result.verdict != PoEVerdict.SKIP
         assert result.state == PoEState.POWERED
         assert result.powered is True
         assert result.power_w == 12.0
@@ -209,3 +211,63 @@ class TestPoEIndependenceFromEthernet:
         result = evaluate_poe_verdict(poe, camera_reachable=True)
         assert result.verdict == PoEVerdict.PASS
         # Ethernet verdict определяется отдельно (counters/link)
+
+
+class TestWalkTestPoEIntegration:
+    def _make_adapter(self, poe_raw):
+        adapter = MagicMock()
+        adapter.get_mac_table.side_effect = [
+            [],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+        ]
+        adapter.get_counters.return_value = {"crc": 0, "drops": 0}
+        adapter.get_poe_status.return_value = poe_raw
+        adapter.shutdown_port.return_value = None
+        return adapter
+
+    def test_powered_poe_without_camera_ip_is_pass(self):
+        port = PortInfo(index=1, name="1", media="copper", supports_poe=True)
+        adapter = self._make_adapter({"status": "ON", "power_w": "12.0", "class": "3"})
+
+        engine = WalkTestEngine(
+            adapter,
+            MagicMock(),
+            WalkTestConfig(detection_retries=1, detection_delay=0),
+        )
+        result = engine.run(ports=[port], progress_callback=lambda s, m: None)[0]
+
+        assert result.verdict == PortVerdict.PASS
+        assert any("PoE: PASS" in note for note in result.notes)
+
+    @patch("switchlive.app.poe.wait_for_camera", return_value=(True, 1.0))
+    def test_powered_poe_with_reachable_camera_is_pass(self, _):
+        port = PortInfo(index=1, name="1", media="copper", supports_poe=True)
+        adapter = self._make_adapter({"status": "ON", "power_w": "12.0", "class": "3"})
+
+        engine = WalkTestEngine(
+            adapter,
+            MagicMock(),
+            WalkTestConfig(
+                detection_retries=1,
+                detection_delay=0,
+                poe_camera_ip="192.0.2.10",
+            ),
+        )
+        result = engine.run(ports=[port], progress_callback=lambda s, m: None)[0]
+
+        assert result.verdict == PortVerdict.PASS
+        assert any("PoE: PASS" in note for note in result.notes)
+
+    def test_poe_fault_downgrades_port_to_warn(self):
+        port = PortInfo(index=1, name="1", media="copper", supports_poe=True)
+        adapter = self._make_adapter({"status": "FAULT", "fault": "overload"})
+
+        engine = WalkTestEngine(
+            adapter,
+            MagicMock(),
+            WalkTestConfig(detection_retries=1, detection_delay=0),
+        )
+        result = engine.run(ports=[port], progress_callback=lambda s, m: None)[0]
+
+        assert result.verdict == PortVerdict.WARN
+        assert any("PoE: FAIL" in note for note in result.notes)
