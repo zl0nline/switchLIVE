@@ -74,7 +74,8 @@ class WalkTestConfig:
     detection_delay: float = 2.0
 
     # Traffic test
-    run_traffic: bool = False  # iperf — #10, пока заглушка
+    run_traffic: bool = False  # iperf
+    iperf_config: object | None = None  # IperfConfig, избегаем circular import
 
     # PoE
     run_poe: bool = True
@@ -236,7 +237,58 @@ class WalkTestEngine:
             except Exception as e:
                 result.notes.append(f"PoE check failed: {e}")
 
-        # 6. SFP тест (если SFP/SFP+ порт)
+        # 6. Traffic test (iperf) — если включён
+        if self.config.run_traffic:
+            self.state = WalkTestState.TEST_TRAFFIC
+            try:
+                from switchlive.app.traffic_iperf import (
+                    IperfConfig,
+                    run_iperf_test,
+                )
+
+                iperf_cfg = self.config.iperf_config
+                if not isinstance(iperf_cfg, IperfConfig):
+                    iperf_cfg = IperfConfig()
+
+                _progress(
+                    WalkTestState.TEST_TRAFFIC,
+                    f"iperf3 → {iperf_cfg.server_host}:{iperf_cfg.server_port}",
+                )
+                iperf_result = run_iperf_test(iperf_cfg)
+
+                result.iperf_throughput = iperf_result.throughput_mbps
+
+                if iperf_result.verdict == "FAIL":
+                    result.notes.append(
+                        f"iperf FAIL: {iperf_result.error}"
+                    )
+                    if result.verdict == PortVerdict.PASS:
+                        result.verdict = PortVerdict.WARN
+                elif iperf_result.verdict == "WARN":
+                    result.notes.append(
+                        f"iperf WARN: {iperf_result.throughput_mbps} Mbps, "
+                        f"loss {iperf_result.loss_percent}%"
+                    )
+                    if result.verdict == PortVerdict.PASS:
+                        result.verdict = PortVerdict.WARN
+                else:
+                    result.notes.append(
+                        f"iperf PASS: {iperf_result.throughput_mbps} Mbps"
+                    )
+
+                _progress(
+                    WalkTestState.TEST_TRAFFIC,
+                    f"iperf: {iperf_result.throughput_mbps} Mbps "
+                    f"({iperf_result.verdict})",
+                )
+            except Exception as e:
+                result.notes.append(f"iperf error: {e}")
+                _progress(
+                    WalkTestState.TEST_TRAFFIC,
+                    f"⚠️ iperf не выполнен: {e}",
+                )
+
+        # 7. SFP тест (если SFP/SFP+ порт)
         if self.config.run_sfp and port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO):
             self.state = WalkTestState.TEST_SFP
             try:
@@ -248,7 +300,7 @@ class WalkTestEngine:
             except Exception as e:
                 result.notes.append(f"SFP check failed: {e}")
 
-        # 7. Shutdown порта
+        # 8. Shutdown порта
         self._shutdown_port(port, _progress)
 
         return result
