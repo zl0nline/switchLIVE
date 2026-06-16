@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from switchlive.tests.traffic_iperf import (
+from switchlive.app.traffic_iperf import (
     IperfConfig,
     IperfResult,
     _evaluate_verdict,
@@ -134,14 +134,14 @@ class TestRunIperf:
         assert result.verdict == "SKIP"
         assert "не задан" in result.error
 
-    @patch("switchlive.tests.traffic_iperf.check_iperf3_available", return_value=False)
+    @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=False)
     def test_iperf3_not_installed(self, _):
         cfg = IperfConfig(server_host="192.168.1.100")
         with pytest.raises(Exception, match="не установлен"):
             run_iperf_test(cfg)
 
-    @patch("switchlive.tests.traffic_iperf.check_iperf3_available", return_value=True)
-    @patch("switchlive.tests.traffic_iperf.subprocess.run")
+    @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=True)
+    @patch("switchlive.app.traffic_iperf.subprocess.run")
     def test_successful_run(self, mock_run, _):
         """Успешный запуск iperf3."""
         mock_run.return_value = MagicMock(
@@ -160,8 +160,8 @@ class TestRunIperf:
         assert result.throughput_mbps == 950.0
         assert result.verdict == "PASS"
 
-    @patch("switchlive.tests.traffic_iperf.check_iperf3_available", return_value=True)
-    @patch("switchlive.tests.traffic_iperf.subprocess.run")
+    @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=True)
+    @patch("switchlive.app.traffic_iperf.subprocess.run")
     def test_iperf_error(self, mock_run, _):
         """iperf3 вернул ошибку."""
         mock_run.return_value = MagicMock(
@@ -176,8 +176,8 @@ class TestRunIperf:
         assert result.verdict == "FAIL"
         assert "unable to connect" in result.error
 
-    @patch("switchlive.tests.traffic_iperf.check_iperf3_available", return_value=True)
-    @patch("switchlive.tests.traffic_iperf.subprocess.run")
+    @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=True)
+    @patch("switchlive.app.traffic_iperf.subprocess.run")
     def test_timeout(self, mock_run, _):
         """Таймаут iperf3."""
         import subprocess as sp

@@ -241,7 +241,7 @@ class WalkTestEngine:
         if self.config.run_traffic:
             self.state = WalkTestState.TEST_TRAFFIC
             try:
-                from switchlive.tests.traffic_iperf import (
+                from switchlive.app.traffic_iperf import (
                     IperfConfig,
                     run_iperf_test,
                 )

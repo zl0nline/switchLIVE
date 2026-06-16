@@ -104,7 +104,7 @@ def show_start_menu() -> None:
 
 def _handle_test_menu() -> None:
     """Меню тестирования."""
-    from switchlive.tests.traffic_iperf import (
+    from switchlive.app.traffic_iperf import (
         check_iperf3_available,
         check_server_reachable,
     )
