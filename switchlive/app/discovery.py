@@ -23,6 +23,7 @@ from switchlive.core.errors import SessionError, TransportError
 from switchlive.core.models import DeviceIdentity
 from switchlive.devices.base import DeviceAdapter, DeviceDetector
 from switchlive.devices.dlink import DLinkAdapter, DLinkDetector  # noqa: F401 — регистрация
+from switchlive.devices.eltex import EltexAdapter, EltexDetector  # noqa: F401 — регистрация
 from switchlive.devices.registry import get_all_detectors
 from switchlive.sessions.cli_session import CLISession
 from switchlive.transports.serial import SerialTransport, list_serial_ports
@@ -133,13 +134,6 @@ def _try_port(
         if auth_method is None:
             continue  # не удалось войти на этом бодрейте
 
-        # Отключить пейджер
-        try:
-            if session.prompt and "dlink" in str(type(detectors[0]).__module__):
-                session.disable_paging("disable clipaging")
-        except Exception:
-            pass  # не критично
-
         # Прогнать детекторы
         for detector in detectors:
             try:
@@ -147,6 +141,8 @@ def _try_port(
                     progress(f"  Детектор {type(detector).__name__}: совпадение!")
                     identity = detector.identify(session)
                     adapter = _create_adapter(identity)
+                    session.vendor = adapter.profile.prompt_vendor
+                    _disable_paging(session, adapter, progress)
                     return DiscoveryResult(
                         found=True,
                         identity=identity,
@@ -215,8 +211,28 @@ def _create_adapter(identity: DeviceIdentity) -> DeviceAdapter:
             adapter.set_model(identity.model)
         return adapter
 
+    if identity.vendor.lower() == "eltex":
+        adapter = EltexAdapter()
+        if identity.model != "unknown":
+            adapter.set_model(identity.model)
+        return adapter
+
     # Unknown — вернём D-Link base как fallback
     log.warning(
         "Unknown vendor: %s, returning D-Link adapter as fallback", identity.vendor
     )
     return DLinkAdapter()
+
+
+def _disable_paging(
+    session: CLISession,
+    adapter: DeviceAdapter,
+    progress,
+) -> None:
+    command = adapter.profile.disable_paging_cmd
+    if not command:
+        return
+    try:
+        session.disable_paging(command)
+    except Exception as e:
+        progress(f"  Не удалось отключить paging: {e}")
