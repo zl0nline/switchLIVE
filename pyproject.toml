@@ -30,7 +30,7 @@ switchlive = "switchlive.cli:main"
 include = ["switchlive*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
