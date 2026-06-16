@@ -1,0 +1,7 @@
+# Стандартные логины/пароли для коммутаторов
+# Формат: username password [enable_password]
+# По одной записи на строку. Строки начиная с # игнорируются.
+admin admin
+admin 1234
+admin password
+root root
