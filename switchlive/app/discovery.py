@@ -23,6 +23,7 @@ from switchlive.core.errors import SessionError, TransportError
 from switchlive.core.models import DeviceIdentity
 from switchlive.devices.base import DeviceAdapter, DeviceDetector
 from switchlive.devices.dlink import DLinkAdapter, DLinkDetector  # noqa: F401 — регистрация
+from switchlive.devices.eltex import EltexAdapter, EltexDetector  # noqa: F401 — регистрация
 from switchlive.devices.registry import get_all_detectors
 from switchlive.sessions.cli_session import CLISession
 from switchlive.transports.serial import SerialTransport, list_serial_ports
@@ -211,6 +212,12 @@ def _create_adapter(identity: DeviceIdentity) -> DeviceAdapter:
     """Создать адаптер для найденного устройства."""
     if identity.vendor.lower() in ("dlink", "d-link"):
         adapter = DLinkAdapter()
+        if identity.model != "unknown":
+            adapter.set_model(identity.model)
+        return adapter
+
+    if identity.vendor.lower() in ("eltex",):
+        adapter = EltexAdapter()
         if identity.model != "unknown":
             adapter.set_model(identity.model)
         return adapter
