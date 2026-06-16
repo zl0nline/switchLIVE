@@ -1,20 +1,22 @@
 """Интерактивная CLI-сессия поверх serial/SSH транспорта.
 
-Сессия знает про:
-- логин (login/password/enable)
-- промпты (определение командного режима)
-- пейджеры (--More--)
-- маскировку паролей в логах
+Login flow — state-machine по свежему output chunk:
+  INIT → (send newline) → читаем chunk
+  → LOGIN_PROMPT? → отправляем username → читаем chunk
+  → PASSWORD_PROMPT? → отправляем password → читаем chunk
+  → COMMAND_PROMPT? → готово
+  → PASSWORD_PROMPT снова? → enable password → читаем chunk
+  → COMMAND_PROMPT? → готово
+  → LOGIN_FAILED? → SessionError
 
-Не знает про:
-- конкретные команды (show version, и т.д.) — это DeviceAdapter
-- тесты — это TestEngine
-- формат отчётов — это ReportWriter
+Важно: на каждом шаге смотрим только свежий chunk (последнюю строку),
+а не весь накопленный transcript. Transcript хранится отдельно для диагностики.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from switchlive.core.credentials import Credentials
@@ -27,16 +29,15 @@ from switchlive.sessions.pager import (
     strip_pager_artifacts,
 )
 from switchlive.sessions.prompts import (
-    find_command_prompt,
-    match_login_failed,
-    match_login_prompt,
-    match_password_prompt,
+    contains_login_failed,
+    find_command_prompt_current,
+    match_login_current,
+    match_password_current,
 )
 from switchlive.transports.base import CommandTransport
 
 log = logging.getLogger(__name__)
 
-# Лимит итераций пейджера — защита от зависания
 MAX_PAGER_ITERATIONS = 100
 
 
@@ -55,68 +56,59 @@ class CLISession(DeviceSession):
         self.prompt_timeout = prompt_timeout
         self.command_timeout = command_timeout
         self._prompt: str | None = None
-        self._username: str = ""  # для логов (без пароля!)
+        self._username: str = ""
+        self._transcript: str = ""  # полный лог сессии (для диагностики)
 
     @property
     def prompt(self) -> str | None:
         return self._prompt
 
+    @property
+    def transcript(self) -> str:
+        """Полный вывод сессии — для диагностики."""
+        return self._transcript
+
     def login(self, credentials: Credentials) -> bool:
-        """Попробовать войти на устройство.
+        """State-machine логин по свежим чанкам вывода.
 
         Returns True при успехе.
         Raises SessionError при невозможности войти.
         """
         self._username = credentials.username
+        self._transcript = ""
 
         try:
-            # «Подёргать» устройство — отправить Enter
-            self.transport.write(b"\r\n")
-            time.sleep(0.5)
-            output = self.transport.read_until_idle(self.prompt_timeout)
-            text = output.decode(errors="replace")
+            # Шаг 1: «подёргать» — отправить Enter, получить первый чанк
+            chunk = self._send_and_read(b"\r\n", self.prompt_timeout)
 
             # Уже в командном режиме?
-            prompt = find_command_prompt(text, self.vendor)
+            prompt = find_command_prompt_current(chunk, self.vendor)
             if prompt:
                 self._prompt = prompt
                 log.info("Already at command prompt: %s", prompt)
                 return True
 
-            # Требуется логин?
-            attempts = 0
-            while match_login_prompt(text) and attempts < 3:
-                self.transport.write(credentials.username.encode() + b"\r\n")
-                time.sleep(0.3)
-                output = self.transport.read_until_idle(self.prompt_timeout)
-                text += output.decode(errors="replace")
-                attempts += 1
-
-            # Требуется пароль?
-            if match_password_prompt(text):
-                self._write_secret(credentials.password + "\r\n")
-                time.sleep(0.5)
-                output = self.transport.read_until_idle(self.prompt_timeout)
-                text += output.decode(errors="replace")
+            # Шаг 2: login prompt?
+            if match_login_current(chunk):
+                chunk = self._send_and_read(
+                    credentials.username.encode() + b"\r\n",
+                    self.prompt_timeout,
+                )
+            # Шаг 3: password prompt?
+            if match_password_current(chunk):
+                chunk = self._send_secret_and_read(
+                    credentials.password,
+                    self.prompt_timeout,
+                )
 
             # Проверить login failed
-            if match_login_failed(text):
+            if contains_login_failed(self._transcript):
                 raise SessionError(
                     f"Авторизация не удалась (пользователь: {credentials.username})"
                 )
 
-            # Enable mode?
-            if match_password_prompt(text):
-                if credentials.enable_password:
-                    self._write_secret(credentials.enable_password + "\r\n")
-                    time.sleep(0.5)
-                    output = self.transport.read_until_idle(self.prompt_timeout)
-                    text += output.decode(errors="replace")
-                else:
-                    raise SessionError("Требуется enable password")
-
-            # Проверить промпт
-            prompt = find_command_prompt(text, self.vendor)
+            # Уже командный промпт?
+            prompt = find_command_prompt_current(chunk, self.vendor)
             if prompt:
                 self._prompt = prompt
                 log.info(
@@ -126,13 +118,39 @@ class CLISession(DeviceSession):
                 )
                 return True
 
-            # Может ещё пароль просит?
-            if match_password_prompt(text):
+            # Шаг 4: enable password prompt?
+            if match_password_current(chunk):
+                if credentials.enable_password:
+                    chunk = self._send_secret_and_read(
+                        credentials.enable_password,
+                        self.prompt_timeout,
+                    )
+                else:
+                    raise SessionError("Требуется enable password")
+
+            # Финальная проверка промпта
+            prompt = find_command_prompt_current(chunk, self.vendor)
+            if prompt:
+                self._prompt = prompt
+                log.info(
+                    "Login successful (enable): user=%s prompt=%s",
+                    credentials.username,
+                    prompt,
+                )
+                return True
+
+            # Login failed после enable?
+            if contains_login_failed(self._transcript):
+                raise SessionError(
+                    f"Авторизация не удалась (пользователь: {credentials.username})"
+                )
+
+            if match_password_current(chunk):
                 raise SessionError("Не удалось войти — возможно неверный пароль")
 
             raise SessionError(
                 f"Не удалось определить промпт после логина. "
-                f"Последний вывод: {self._safe_text(text)[:200]}"
+                f"Последний вывод: {self._safe_text(chunk)[:200]}"
             )
 
         except SessionError:
@@ -153,21 +171,17 @@ class CLISession(DeviceSession):
         to = timeout or self.command_timeout
 
         # Отправить команду
-        self.transport.write(command.encode() + b"\r\n")
-
-        # Собрать вывод
-        output = self.transport.read_until_idle(to)
-        text = output.decode(errors="replace")
+        chunk = self._send_and_read(
+            command.encode() + b"\r\n", to
+        )
 
         # Обработка пейджера
         iterations = 0
-        while detect_pager(text) and iterations < MAX_PAGER_ITERATIONS:
-            self.transport.write(pager_space())
-            time.sleep(0.3)
-            more = self.transport.read_until_idle(to)
-            if not more:
+        while detect_pager(chunk) and iterations < MAX_PAGER_ITERATIONS:
+            more = self._send_and_read(pager_space(), to)
+            if not more.strip():
                 break
-            text += more.decode(errors="replace")
+            chunk += more
             iterations += 1
 
         if iterations >= MAX_PAGER_ITERATIONS:
@@ -177,17 +191,17 @@ class CLISession(DeviceSession):
             )
 
         # Очистить артефакты пейджера
-        text = strip_pager_artifacts(text)
+        chunk = strip_pager_artifacts(chunk)
 
         # Проверить промпт в конце
-        prompt = find_command_prompt(text, self.vendor)
+        prompt = find_command_prompt_current(chunk, self.vendor)
         if not prompt:
             log.warning(
                 "Command completed without prompt: %s",
                 command[:50],
             )
 
-        return CommandResult(output=text, success=True)
+        return CommandResult(output=chunk, success=True)
 
     def disable_paging(self, command: str = "") -> None:
         """Отправить команду для отключения пейджера.
@@ -203,15 +217,29 @@ class CLISession(DeviceSession):
 
     # --- Внутренние методы ---
 
-    def _write_secret(self, text: str) -> None:
-        """Отправить секрет (пароль) без попадания в логи."""
-        self.transport.write(text.encode())
+    def _send_and_read(self, data: bytes, timeout: float) -> str:
+        """Отправить байты, прочитать ответ, добавить в transcript, вернуть chunk."""
+        self.transport.write(data)
+        time.sleep(0.1)
+        raw = self.transport.read_until_idle(timeout)
+        chunk = raw.decode(errors="replace")
+        self._transcript += chunk
+        return chunk
+
+    def _send_secret_and_read(self, secret: str, timeout: float) -> str:
+        """Отправить пароль (без попадания в логи), прочитать ответ."""
+        self.transport.write(secret.encode() + b"\r\n")
+        time.sleep(0.3)
+        raw = self.transport.read_until_idle(timeout)
+        chunk = raw.decode(errors="replace")
+        # В transcript пишем маскированную версию
+        self._transcript += re.sub(
+            r"(?i)(password\s*:?\s*)\S+", r"\1***", chunk
+        )
+        return chunk
 
     def _safe_text(self, text: str) -> str:
         """Маскировать потенциальные пароли в тексте для логов."""
-        # Убираем строки с password
-        import re
-
         return re.sub(
             r"(?i)(password\s*:?\s*)\S+",
             r"\1***",

@@ -2,6 +2,10 @@
 
 Session использует эти паттерны для определения состояния CLI.
 Вендоры могут добавлять свои паттерны через DeviceProfile.
+
+Важно: разделяем «последнее состояние» (last chunk / last line) и
+«поиск по всему transcript». Login flow работает по последнему чанку,
+чтобы не матчить устаревшие промпты.
 """
 
 from __future__ import annotations
@@ -58,24 +62,71 @@ LOGIN_FAILED_PATTERNS = [
 ]
 
 
-def match_any(text: str, patterns: list[str]) -> bool:
-    return any(re.search(p, text, re.MULTILINE) for p in patterns)
+def _last_nonempty_line(text: str) -> str:
+    """Вернуть последнюю непустую строку после очистки."""
+    lines = text.replace("\r", "").rstrip().split("\n")
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
 
+
+def match_login_current(chunk: str) -> bool:
+    """Смотрит последнюю непустую строку чанка — нужен ли login."""
+    line = _last_nonempty_line(chunk)
+    return any(re.search(p, line) for p in LOGIN_PATTERNS)
+
+
+def match_password_current(chunk: str) -> bool:
+    """Смотрит последнюю непустую строку чанка — нужен ли пароль."""
+    line = _last_nonempty_line(chunk)
+    return any(re.search(p, line) for p in PASSWORD_PATTERNS)
+
+
+def find_command_prompt_current(chunk: str, vendor: str = "generic") -> str | None:
+    """Ищет командный промпт в последней непустой строке.
+
+    Возвращает matched prompt или None.
+    """
+    line = _last_nonempty_line(chunk)
+    patterns = COMMAND_PROMPTS.get(vendor, COMMAND_PROMPTS["generic"])
+    for pattern in patterns:
+        match = re.search(pattern, line)
+        if match:
+            return match.group(0).strip()
+    return None
+
+
+def contains_login_failed(transcript: str) -> bool:
+    """Ищет признаки неудачного логина по всему transcript."""
+    return any(re.search(p, transcript) for p in LOGIN_FAILED_PATTERNS)
+
+
+# --- Совместимость со старыми тестами ---
 
 def match_login_prompt(text: str) -> bool:
-    return match_any(text, LOGIN_PATTERNS)
+    """Legacy: поиск login prompt по всему тексту (для тестов/диагностики)."""
+    return match_login_current(text)
 
 
 def match_password_prompt(text: str) -> bool:
-    return match_any(text, PASSWORD_PATTERNS)
+    """Legacy: поиск password prompt по всему тексту."""
+    return match_password_current(text)
 
 
 def match_login_failed(text: str) -> bool:
-    return match_any(text, LOGIN_FAILED_PATTERNS)
+    """Legacy alias для contains_login_failed."""
+    return contains_login_failed(text)
 
 
 def find_command_prompt(text: str, vendor: str = "generic") -> str | None:
-    """Найти командный промпт в тексте. Возвращает matched prompt или None."""
+    """Поиск промпта — сначала в последней строке, потом по всему тексту."""
+    # Сначала проверяем последнюю строку (canonical)
+    result = find_command_prompt_current(text, vendor)
+    if result:
+        return result
+    # Fallback — поиск по всему тексту (для edge cases с доп. whitespace)
     patterns = COMMAND_PROMPTS.get(vendor, COMMAND_PROMPTS["generic"])
     for pattern in patterns:
         match = re.search(pattern, text, re.MULTILINE)
