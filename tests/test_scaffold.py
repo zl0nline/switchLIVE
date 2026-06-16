@@ -37,6 +37,12 @@ def test_import_timeouts():
     assert hasattr(mod, "TimeoutPolicy")
 
 
+def test_import_diagnostics():
+    mod = importlib.import_module("switchlive.diagnostics")
+    assert hasattr(mod, "configure_logging")
+    assert hasattr(mod, "collect_debug_bundle")
+
+
 def test_import_transport_base():
     mod = importlib.import_module("switchlive.transports.base")
     assert hasattr(mod, "CommandTransport")

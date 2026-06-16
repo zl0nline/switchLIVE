@@ -16,12 +16,12 @@ Login flow — state-machine по свежему output chunk:
 from __future__ import annotations
 
 import logging
-import re
 import time
 
 from switchlive.core.credentials import Credentials
 from switchlive.core.errors import SessionError
 from switchlive.core.models import CommandResult
+from switchlive.diagnostics import redact_text
 from switchlive.sessions.base import DeviceSession
 from switchlive.sessions.pager import (
     detect_pager,
@@ -219,29 +219,34 @@ class CLISession(DeviceSession):
 
     def _send_and_read(self, data: bytes, timeout: float) -> str:
         """Отправить байты, прочитать ответ, добавить в transcript, вернуть chunk."""
+        log.debug("TX: %s", self._safe_bytes(data))
         self.transport.write(data)
         time.sleep(0.1)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
+        chunk = redact_text(chunk)
         self._transcript += chunk
+        log.debug("RX: %s", self._safe_text(chunk))
         return chunk
 
     def _send_secret_and_read(self, secret: str, timeout: float) -> str:
         """Отправить пароль (без попадания в логи), прочитать ответ."""
+        log.debug("TX: ***")
         self.transport.write(secret.encode() + b"\r\n")
         time.sleep(0.3)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
         # В transcript пишем маскированную версию
-        self._transcript += re.sub(
-            r"(?i)(password\s*:?\s*)\S+", r"\1***", chunk
-        )
+        chunk = self._safe_text(redact_text(chunk))
+        self._transcript += chunk
+        log.debug("RX: %s", chunk)
         return chunk
 
     def _safe_text(self, text: str) -> str:
         """Маскировать потенциальные пароли в тексте для логов."""
-        return re.sub(
-            r"(?i)(password\s*:?\s*)\S+",
-            r"\1***",
-            text,
-        )
+        return redact_text(text)
+
+    def _safe_bytes(self, data: bytes) -> str:
+        """Decode command bytes for debug logs without control noise."""
+        text = data.decode(errors="replace").replace("\r", "\\r").replace("\n", "\\n")
+        return self._safe_text(text)

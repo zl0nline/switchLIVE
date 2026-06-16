@@ -29,6 +29,22 @@ switchlive
 python -m switchlive
 ```
 
+Debug-режим для диагностики стенда:
+
+```bash
+switchlive --debug
+```
+
+Он пишет подробный лог в `logs/switchlive-YYYYMMDD-HHMMSS.log`.
+Чтобы собрать архив для багрепорта:
+
+```bash
+switchlive --debug --bug-report
+```
+
+или выберите пункт `Собрать debug bundle` в меню. Архив маскирует пароли и
+кладётся в `debug-bundles/`.
+
 ## Внешние зависимости
 
 - `iperf3` — должен быть установлен в системе и доступен в PATH
