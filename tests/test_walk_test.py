@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from switchlive.app.walk_test import (
     WalkTestConfig,
@@ -148,8 +148,8 @@ class TestWalkTestEngine:
         assert result.verdict == PortVerdict.WARN
         assert any("CRC" in n for n in result.notes)
 
-    def test_port_not_detected_warn(self):
-        """Порт не найден → WARN + shutdown."""
+    def test_port_not_detected_warn_without_shutdown(self):
+        """Порт не найден → WARN, порт остаётся включённым."""
         port = PortInfo(index=1, name="1", type=PortType.COPPER)
         adapter = _make_mock_adapter(ports=[port], mac_table=[])
         session = MagicMock()
@@ -159,7 +159,7 @@ class TestWalkTestEngine:
 
         assert result.verdict == PortVerdict.WARN
         assert result.port is port
-        assert adapter.shutdown_port.called
+        assert not adapter.shutdown_port.called
 
     def test_full_walk_test_run(self):
         """Полный прогон по 2 портам."""
@@ -233,3 +233,68 @@ class TestWalkTestEngine:
 
         adapter.get_transceiver.assert_called_once()
         assert any("SFP" in n for n in result.notes)
+
+    def test_failed_traffic_does_not_shutdown_port(self):
+        """Если iperf FAIL, порт оставляем включённым для повторного теста."""
+        from switchlive.app.traffic_iperf import IperfConfig, IperfResult
+        from switchlive.core.models import MacEntry
+
+        port = PortInfo(index=1, name="1", type=PortType.COPPER)
+        mac_seq = [
+            [],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+        ]
+        adapter = _make_mock_adapter(
+            ports=[port],
+            mac_table_sequence=mac_seq,
+            counters={},
+        )
+        session = MagicMock()
+        config = WalkTestConfig(
+            run_traffic=True,
+            iperf_config=IperfConfig(server_host="192.0.2.10"),
+            detection_retries=1,
+            detection_delay=0,
+        )
+
+        with patch(
+            "switchlive.app.traffic_iperf.run_iperf_test",
+            return_value=IperfResult(verdict="FAIL", error="no route"),
+        ):
+            result = WalkTestEngine(adapter, session, config)._test_port(port, lambda s, m: None)
+
+        assert result.traffic_passed is False
+        assert not adapter.shutdown_port.called
+        adapter.no_shutdown_port.assert_called_once()
+
+    def test_passed_traffic_shutdowns_port(self):
+        """Если iperf PASS, порт выключаем как успешно проверенный."""
+        from switchlive.app.traffic_iperf import IperfConfig, IperfResult
+        from switchlive.core.models import MacEntry
+
+        port = PortInfo(index=1, name="1", type=PortType.COPPER)
+        mac_seq = [
+            [],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+        ]
+        adapter = _make_mock_adapter(
+            ports=[port],
+            mac_table_sequence=mac_seq,
+            counters={},
+        )
+        session = MagicMock()
+        config = WalkTestConfig(
+            run_traffic=True,
+            iperf_config=IperfConfig(server_host="192.0.2.10"),
+            detection_retries=1,
+            detection_delay=0,
+        )
+
+        with patch(
+            "switchlive.app.traffic_iperf.run_iperf_test",
+            return_value=IperfResult(success=True, throughput_mbps=100.0, verdict="PASS"),
+        ):
+            result = WalkTestEngine(adapter, session, config)._test_port(port, lambda s, m: None)
+
+        assert result.traffic_passed is True
+        adapter.shutdown_port.assert_called_once()

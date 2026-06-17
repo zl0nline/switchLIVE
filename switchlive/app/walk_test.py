@@ -30,6 +30,18 @@ from switchlive.devices.base import DeviceAdapter, DeviceSession
 log = logging.getLogger(__name__)
 
 
+def _format_link_status(port: PortInfo) -> str:
+    speed = f"{port.actual_speed}M" if port.actual_speed else "unknown"
+    duplex = port.duplex or "unknown"
+    return f"Link: {port.link_status.value}, speed: {speed}, duplex: {duplex}"
+
+
+def _format_counters(counters: dict[str, int]) -> str:
+    if not counters:
+        return "Counters: нет данных"
+    return "Counters: " + ", ".join(f"{key}={value}" for key, value in sorted(counters.items()))
+
+
 class WalkTestState(str, Enum):
     """Состояния walk-test."""
 
@@ -56,6 +68,7 @@ class PortTestResult:
     detection: DetectionResult | None = None
     counters: dict[str, int] = field(default_factory=dict)
     iperf_throughput: float = 0.0
+    traffic_passed: bool = False
     sfp: object | None = None
 
 
@@ -170,6 +183,8 @@ class WalkTestEngine:
             self._baseline = take_mac_baseline(self.adapter, self.session)
             _progress(WalkTestState.BASELINE, f"Baseline MAC: {len(self._baseline)} записей")
 
+        self._enable_port(port, _progress)
+
         # 2. Ждать подключения (link up)
         self.state = WalkTestState.WAIT_LINK
         _progress(WalkTestState.WAIT_LINK, f"Подключите кабель в порт {port.name}")
@@ -194,8 +209,6 @@ class WalkTestEngine:
                 WalkTestState.DETECT_PORT,
                 f"⚠️ Порт не определён: {detection.warnings}",
             )
-            # Всё равно shutdown
-            self._shutdown_port(port, _progress)
             return result
 
         # Обновляем baseline — добавляем найденный MAC
@@ -207,12 +220,12 @@ class WalkTestEngine:
         # 4. Тест линка: counters
         self.state = WalkTestState.TEST_LINK
         try:
+            self._refresh_port_state(port)
+            _progress(WalkTestState.TEST_LINK, _format_link_status(port))
+
             counters = self.adapter.get_counters(self.session, port)
             result.counters = counters
-            _progress(
-                WalkTestState.TEST_LINK,
-                f"Counters: {counters}",
-            )
+            _progress(WalkTestState.TEST_LINK, _format_counters(counters))
 
             # Оценка counters
             crc = counters.get("crc", 0)
@@ -222,6 +235,8 @@ class WalkTestEngine:
                 result.notes.append(f"CRC={crc}, drops={drops}")
             else:
                 result.verdict = PortVerdict.PASS
+                if not counters:
+                    result.notes.append("Counters unavailable")
         except Exception as e:
             result.verdict = PortVerdict.WARN
             result.notes.append(f"Counters error: {e}")
@@ -315,6 +330,7 @@ class WalkTestEngine:
                     if result.verdict == PortVerdict.PASS:
                         result.verdict = PortVerdict.WARN
                 else:
+                    result.traffic_passed = True
                     result.notes.append(
                         f"iperf PASS: {iperf_result.throughput_mbps} Mbps"
                     )
@@ -361,10 +377,40 @@ class WalkTestEngine:
             except Exception as e:
                 result.notes.append(f"SFP check failed: {e}")
 
-        # 8. Shutdown порта
-        self._shutdown_port(port, _progress)
+        # 8. Shutdown порта только после успешного теста
+        if self._should_shutdown_after_test(result):
+            self._shutdown_port(port, _progress)
+        else:
+            _progress(
+                WalkTestState.SHUTDOWN,
+                f"Порт {port.name} оставлен включённым для повторной проверки",
+            )
 
         return result
+
+    def _enable_port(self, port: PortInfo, _progress) -> None:
+        try:
+            self.adapter.no_shutdown_port(self.session, port)
+        except Exception as e:
+            _progress(
+                WalkTestState.WAIT_LINK,
+                f"⚠️ Не удалось включить порт {port.name}: {e}",
+            )
+
+    def _refresh_port_state(self, port: PortInfo) -> None:
+        ports = self.adapter.list_ports(self.session)
+        live = next((item for item in ports if item.index == port.index), None)
+        if not live:
+            return
+        port.admin_status = live.admin_status
+        port.link_status = live.link_status
+        port.actual_speed = live.actual_speed
+        port.duplex = live.duplex
+
+    def _should_shutdown_after_test(self, result: PortTestResult) -> bool:
+        if self.config.run_traffic:
+            return result.traffic_passed
+        return result.verdict == PortVerdict.PASS
 
     def _shutdown_port(self, port: PortInfo, _progress) -> None:
         """Shutdown порта — сигнал оператору для перестановки кабеля."""
