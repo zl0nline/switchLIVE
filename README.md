@@ -18,7 +18,7 @@
 - Опциональная проверка PoE-камеры по IP.
 - SFP/SFP+ probe и DOM metrics, если они доступны на устройстве.
 - Опциональный traffic test через `iperf3`.
-- Backend helpers для HTML/CSV отчётов и SQLite history.
+- HTML/CSV отчёты и SQLite history после полного или частичного теста.
 - Безопасная finalization helper: отчёты/history создаются до optional factory reset.
 - Debug logging и sanitized debug bundle для багрепортов.
 
@@ -69,9 +69,9 @@ switchlive --help
 Интерактивный режим показывает:
 
 - `Определение коммутатора` — serial discovery, login, vendor/model/profile.
-- `Тест портов / traffic` — discovery, uplink preflight, walk-test и iperf.
+- `Тест портов / traffic` — discovery, uplink preflight, полный walk-test и iperf.
 - `PoE тест` — отдельная проверка PoE-портов, если они есть в профиле.
-- `История тестов` — backend history уже есть, просмотр в console UI ещё не реализован.
+- `История тестов` — последние сохранённые запуски по модели/serial/verdict.
 - `Настройки` — пока заглушка.
 - `Собрать debug bundle` — zip для багрепорта.
 
@@ -150,7 +150,7 @@ switchlive --debug --bug-report
 
 ## Отчёты, история и finalization
 
-Backend-слой умеет сохранять результаты в:
+Console UI сохраняет результаты полного или остановленного оператором теста в:
 
 - SQLite history database для повторного поиска по serial number.
 - HTML report для просмотра человеком.
@@ -159,8 +159,8 @@ Backend-слой умеет сохранять результаты в:
 `finalize_after_test()` пишет отчёты и history до optional factory reset, чтобы
 результат теста не терялся при ошибке reset/reload.
 
-Текущий console UI печатает summary после walk-test. Отдельный экран просмотра
-history и автоматическая генерация отчётов из меню ещё не подключены.
+Во время walk-test перед каждым портом можно нажать Enter для продолжения или
+`q`, чтобы закончить тест и сохранить отчёт по уже проверенным портам.
 
 ## Проверки разработки
 

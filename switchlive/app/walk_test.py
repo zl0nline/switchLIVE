@@ -124,12 +124,14 @@ class WalkTestEngine:
         self,
         ports: list[PortInfo] | None = None,
         progress_callback=None,
+        continue_callback=None,
     ) -> list[PortTestResult]:
         """Запустить walk-test по всем портам.
 
         Args:
             ports: список портов (если None — берёт из adapter).
             progress_callback: функция(state, message) для UI.
+            continue_callback: функция(port, number, total) -> bool перед каждым портом.
 
         Returns:
             Список результатов по каждому порту.
@@ -146,22 +148,25 @@ class WalkTestEngine:
         testable = self._filter_ports(ports)
         _progress(WalkTestState.INIT, f"Портов к тестированию: {len(testable)}")
 
-        results = []
+        self.results = []
 
         for i, port in enumerate(testable):
+            if continue_callback and not continue_callback(port, i + 1, len(testable)):
+                _progress(WalkTestState.DONE, f"Тестирование остановлено: {len(self.results)}/{len(testable)} портов")
+                break
+
             _progress(
                 WalkTestState.NEXT_PORT,
                 f"Порт {i+1}/{len(testable)}: {port.name} ({port.type.value})",
             )
 
             result = self._test_port(port, _progress)
-            results.append(result)
+            self.results.append(result)
 
         self.state = WalkTestState.DONE
-        _progress(WalkTestState.DONE, f"Тестирование завершено: {len(results)} портов")
+        _progress(WalkTestState.DONE, f"Тестирование завершено: {len(self.results)} портов")
 
-        self.results = results
-        return results
+        return self.results
 
     def _filter_ports(self, ports: list[PortInfo]) -> list[PortInfo]:
         """Отфильтровать порты, которые не нужно тестировать."""

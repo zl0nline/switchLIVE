@@ -182,6 +182,31 @@ class TestWalkTestEngine:
         assert len(results) == 2
         assert engine.state == WalkTestState.DONE
 
+    def test_run_can_stop_before_next_port(self):
+        """Оператор может закончить тест и получить частичные результаты."""
+        from switchlive.core.models import MacEntry
+
+        ports = [
+            PortInfo(index=1, name="1", type=PortType.COPPER),
+            PortInfo(index=2, name="2", type=PortType.COPPER),
+        ]
+        adapter = _make_mock_adapter(
+            ports=ports,
+            mac_table=[MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            counters={"crc": 0, "drops": 0},
+        )
+        decisions = iter([True, False])
+
+        engine = WalkTestEngine(adapter, MagicMock())
+        results = engine.run(
+            ports=ports,
+            progress_callback=lambda s, m: None,
+            continue_callback=lambda port, number, total: next(decisions),
+        )
+
+        assert len(results) == 1
+        assert engine.results == results
+
     def test_poe_test_called_for_poe_port(self):
         """PoE тест вызывается для PoE-порта."""
         from switchlive.core.models import MacEntry

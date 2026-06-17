@@ -14,7 +14,7 @@ from switchlive.core.models import (
     TestResult as SwitchTestResult,
 )
 from switchlive.reports.generator import export_csv, export_html, render_csv, render_html
-from switchlive.storage.history import list_runs_by_serial, load_test_result, save_test_result
+from switchlive.storage.history import list_recent_runs, list_runs_by_serial, load_test_result, save_test_result
 
 
 def _sample_result() -> SwitchTestResult:
@@ -91,6 +91,16 @@ class TestHistoryStorage:
         rows = list_runs_by_serial(db_path, "SN123")
 
         assert len(rows) == 2
+
+    def test_list_recent_runs_includes_port_count(self, tmp_path):
+        db_path = tmp_path / "history.sqlite"
+        run_id = save_test_result(db_path, _sample_result())
+
+        rows = list_recent_runs(db_path)
+
+        assert rows[0]["id"] == run_id
+        assert rows[0]["serial"] == "SN123"
+        assert rows[0]["port_count"] == 2
 
 
 class TestReports:

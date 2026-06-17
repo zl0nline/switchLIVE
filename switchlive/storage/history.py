@@ -59,6 +59,37 @@ def list_runs_by_serial(db_path: str | Path, serial: str) -> list[dict[str, Any]
         return [dict(row) for row in rows]
 
 
+def list_recent_runs(db_path: str | Path, limit: int = 20) -> list[dict[str, Any]]:
+    """List recent test runs across devices."""
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT
+                tr.id,
+                d.serial,
+                d.vendor,
+                d.model,
+                d.firmware,
+                tr.started_at,
+                tr.finished_at,
+                tr.operator,
+                tr.overall_verdict,
+                tr.comments,
+                COUNT(pr.id) AS port_count
+            FROM test_runs tr
+            JOIN devices d ON d.id = tr.device_id
+            LEFT JOIN port_results pr ON pr.run_id = tr.id
+            GROUP BY tr.id
+            ORDER BY tr.started_at DESC, tr.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def load_test_result(db_path: str | Path, run_id: int) -> TestResult:
     """Load a TestResult from history for report regeneration."""
     init_db(db_path)

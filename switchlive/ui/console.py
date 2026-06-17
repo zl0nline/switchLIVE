@@ -5,13 +5,16 @@ from __future__ import annotations
 import re
 import sys
 import time
+from datetime import datetime
 
 from switchlive.app.discovery import run_discovery
+from switchlive.app.finalize import FinalizeConfig, finalize_after_test
 from switchlive.app.port_detection import (
     detect_active_port,
     detect_existing_uplink_by_mac_count,
     take_mac_baseline,
 )
+from switchlive.app.test_result_builder import build_test_result
 from switchlive.app.traffic_iperf import (
     IperfConfig,
     check_iperf3_available,
@@ -27,6 +30,7 @@ from switchlive.core.credentials import Credentials
 from switchlive.core.models import LinkStatus, PortInfo, PortType, PortVerdict
 from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
+from switchlive.storage.history import list_recent_runs
 
 ANSI = {
     "reset": "\033[0m",
@@ -214,7 +218,7 @@ def show_start_menu(
                 _handle_poe_test_menu(config)
                 _print_bottom_menu()
             elif choice == "4":
-                print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
+                _handle_history_menu(config)
                 _print_bottom_menu()
             elif choice == "5":
                 print("\n  ⚠️ Настройки — ещё не реализовано\n")
@@ -269,18 +273,34 @@ def _handle_test_menu(config: Config) -> None:
     if not uplink_ready:
         return
 
-    skip_ports = _uplink_skip_indexes(ports, uplink)
-    test_config = _configure_walk_test(config, skip_port_indexes=skip_ports)
+    test_config = _configure_walk_test(config, skip_port_indexes=set())
     engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
+    print(_c("  Перед каждым портом: Enter — тестировать, q — закончить и сохранить отчёт.", "cyan"))
     progress_total = len(engine._filter_ports(ports))
-    results = engine.run(
-        ports=ports,
-        progress_callback=_make_walk_progress(progress_total),
-    )
+    started_at = datetime.now()
+    try:
+        results = engine.run(
+            ports=ports,
+            progress_callback=_make_walk_progress(progress_total),
+            continue_callback=_continue_or_finish,
+        )
+    except KeyboardInterrupt:
+        print()
+        print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
+        results = engine.results
 
     _print_walk_summary(results)
+    _persist_test_artifacts(
+        adapter=adapter,
+        session=session,
+        identity=discovery.identity,
+        results=results,
+        started_at=started_at,
+        config=config,
+        comments="traffic walk-test",
+    )
 
 
 def _handle_poe_test_menu(config: Config) -> None:
@@ -308,11 +328,99 @@ def _handle_poe_test_menu(config: Config) -> None:
     test_config = _configure_poe_test(config)
     engine = WalkTestEngine(adapter, session, test_config)
     _section("Ход PoE тестирования")
-    results = engine.run(
-        ports=poe_ports,
-        progress_callback=_make_walk_progress(len(poe_ports)),
-    )
+    print(_c("  Перед каждым портом: Enter — тестировать, q — закончить и сохранить отчёт.", "cyan"))
+    started_at = datetime.now()
+    try:
+        results = engine.run(
+            ports=poe_ports,
+            progress_callback=_make_walk_progress(len(poe_ports)),
+            continue_callback=_continue_or_finish,
+        )
+    except KeyboardInterrupt:
+        print()
+        print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
+        results = engine.results
     _print_walk_summary(results)
+    _persist_test_artifacts(
+        adapter=adapter,
+        session=session,
+        identity=discovery.identity,
+        results=results,
+        started_at=started_at,
+        config=config,
+        comments="poe test",
+    )
+
+
+def _handle_history_menu(config: Config) -> None:
+    """Show recent saved test runs."""
+    _section("История тестов")
+    rows = list_recent_runs(config.db_path, limit=20)
+    if not rows:
+        print(_c("  История пока пустая.", "yellow"))
+        return
+
+    for row in rows:
+        finished = row.get("finished_at") or ""
+        print(
+            "  "
+            f"#{row['id']} {finished[:19]} "
+            f"{row['vendor']} {row['model']} "
+            f"serial={row['serial']} "
+            f"ports={row.get('port_count', 0)} "
+            f"overall={row['overall_verdict']}"
+        )
+
+
+def _persist_test_artifacts(
+    *,
+    adapter,
+    session,
+    identity,
+    results: list[PortTestResult],
+    started_at: datetime,
+    config: Config,
+    comments: str,
+) -> None:
+    """Save history and reports for full or partial test runs."""
+    test_result = build_test_result(
+        identity,
+        results,
+        started_at=started_at,
+        finished_at=datetime.now(),
+        comments=comments,
+    )
+    finalize = finalize_after_test(
+        adapter,
+        session,
+        test_result,
+        FinalizeConfig(
+            factory_reset=False,
+            report_dir=config.report_dir,
+            db_path=config.db_path,
+        ),
+    )
+    if finalize.errors:
+        print(_c(f"  [WARN] Отчёт/история не сохранены: {'; '.join(finalize.errors)}", "yellow"))
+        return
+
+    print(_c("  [OK] Результаты сохранены", "green"))
+    if finalize.history_run_id is not None:
+        print(f"     История: run #{finalize.history_run_id}")
+    if finalize.html_report:
+        print(f"     HTML: {finalize.html_report}")
+    if finalize.csv_report:
+        print(f"     CSV:  {finalize.csv_report}")
+
+
+def _continue_or_finish(port: PortInfo, number: int, total: int) -> bool:
+    try:
+        answer = input(f"  Порт {number}/{total}: Enter = тестировать {port.name}, q = закончить: ").strip().lower()
+    except EOFError:
+        return True
+    if answer in {"q", "quit", "stop", "finish", "end", "й", "стоп", "завершить", "0"}:
+        return False
+    return True
 
 
 def _configure_walk_test(
@@ -419,17 +527,6 @@ def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
         if port.role in ("uplink", "combo")
         or port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO)
     ]
-
-
-def _uplink_skip_indexes(ports: list[PortInfo], detected_uplink: PortInfo | None) -> set[int]:
-    if detected_uplink:
-        return {detected_uplink.index}
-
-    candidates = _uplink_candidates(ports)
-    if not candidates or len(candidates) == len(ports):
-        return set()
-
-    return {port.index for port in candidates}
 
 
 def _dedupe_ports(ports: list[PortInfo]) -> list[PortInfo]:
