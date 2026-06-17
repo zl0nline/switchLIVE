@@ -51,15 +51,49 @@ class _OperatorStopRequested(Exception):
 
 
 class _FinishKeyWatcher:
-    """Non-blocking terminal watcher for `q + Enter`."""
+    """Non-blocking terminal watcher for single-key `q` press.
+
+    On the first call, switches stdin to cbreak mode so that keys are
+    available immediately without Enter. Restores the original terminal
+    settings on close/finish.
+    """
 
     def __init__(self, stream=None) -> None:
         self.stream = stream or sys.stdin
         self._requested = False
+        self._armed = False
+        self._old_settings: list | None = None
+
+    def _arm(self) -> None:
+        """Switch terminal to cbreak mode for single-key reads."""
+        if self._armed:
+            return
+        try:
+            import termios
+            import tty
+            self._old_settings = termios.tcgetattr(self.stream.fileno())
+            tty.setcbreak(self.stream.fileno())
+            self._armed = True
+        except (ImportError, OSError, ValueError):
+            # Not a real terminal (e.g. piped stdin) — fall back to line mode
+            pass
+
+    def _disarm(self) -> None:
+        """Restore original terminal settings."""
+        if not self._armed or self._old_settings is None:
+            return
+        try:
+            import termios
+            termios.tcsetattr(self.stream.fileno(), termios.TCSADRAIN, self._old_settings)
+        except (OSError, ValueError, ImportError):
+            pass
+        self._armed = False
+        self._old_settings = None
 
     def requested(self) -> bool:
         if self._requested:
             return True
+        self._arm()
         try:
             ready, _, _ = select.select([self.stream], [], [], 0)
         except (OSError, ValueError):
@@ -67,9 +101,18 @@ class _FinishKeyWatcher:
         if not ready:
             return False
 
-        line = self.stream.readline().strip().lower()
-        self._requested = line in FINISH_COMMANDS
+        if self._armed:
+            # cbreak mode: read single char
+            ch = self.stream.read(1).lower()
+            self._requested = ch in ("q", "й")
+        else:
+            # Fallback: line mode
+            line = self.stream.readline().strip().lower()
+            self._requested = line in FINISH_COMMANDS
         return self._requested
+
+    def close(self) -> None:
+        self._disarm()
 
 
 def _c(text: str, color: str) -> str:
@@ -302,14 +345,19 @@ def _handle_test_menu(config: Config) -> None:
     if not uplink_ready:
         return
 
-    test_config = _configure_walk_test(config, skip_port_indexes=set())
+    skip_indexes = set()
+    if uplink:
+        skip_indexes.add(uplink.index)
+
+    test_config = _configure_walk_test(config, skip_port_indexes=skip_indexes)
     engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
-    print(_c("  Тест идёт автоматически. Наберите q и Enter, чтобы закончить и сохранить отчёт.", "cyan"))
+    print(_c("  Тест идёт автоматически. Нажмите q, чтобы закончить и сохранить отчёт.", "cyan"))
     progress_total = len(engine._filter_ports(ports))
     started_at = datetime.now()
     watcher = _FinishKeyWatcher()
+    engine.set_stop_callback(watcher.requested)
     try:
         results = engine.run(
             ports=ports,
@@ -320,6 +368,8 @@ def _handle_test_menu(config: Config) -> None:
         print()
         print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
         results = engine.results
+    finally:
+        watcher.close()
 
     _print_walk_summary(results)
     _persist_test_artifacts(
@@ -358,9 +408,10 @@ def _handle_poe_test_menu(config: Config) -> None:
     test_config = _configure_poe_test(config)
     engine = WalkTestEngine(adapter, session, test_config)
     _section("Ход PoE тестирования")
-    print(_c("  Тест идёт автоматически. Наберите q и Enter, чтобы закончить и сохранить отчёт.", "cyan"))
+    print(_c("  Тест идёт автоматически. Нажмите q, чтобы закончить и сохранить отчёт.", "cyan"))
     started_at = datetime.now()
     watcher = _FinishKeyWatcher()
+    engine.set_stop_callback(watcher.requested)
     try:
         results = engine.run(
             ports=poe_ports,
@@ -371,6 +422,8 @@ def _handle_poe_test_menu(config: Config) -> None:
         print()
         print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
         results = engine.results
+    finally:
+        watcher.close()
     _print_walk_summary(results)
     _persist_test_artifacts(
         adapter=adapter,

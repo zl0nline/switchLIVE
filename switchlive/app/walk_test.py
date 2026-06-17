@@ -119,6 +119,11 @@ class WalkTestEngine:
         self.results: list[PortTestResult] = []
         self.shutdown_ports: set[int] = set()
         self._baseline: dict[str, MacEntry] | None = None  # sentinel: None = not taken yet
+        self._should_stop = None  # callback: () -> bool, set externally
+
+    def set_stop_callback(self, callback) -> None:
+        """Set a callback that returns True when the test should stop."""
+        self._should_stop = callback
 
     def run(
         self,
@@ -207,6 +212,7 @@ class WalkTestEngine:
             self.shutdown_ports,
             self.config.detection_retries,
             self.config.detection_delay,
+            should_stop=self._should_stop,
         )
         result.detection = detection
 

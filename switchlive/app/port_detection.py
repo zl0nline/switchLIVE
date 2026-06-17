@@ -271,6 +271,7 @@ def detect_active_port_with_retry(
     shutdown_ports: set[int] | None = None,
     max_retries: int = 3,
     retry_delay: float = 2.0,
+    should_stop=None,
 ) -> DetectionResult:
     """Повторять определение порта с задержкой.
 
@@ -279,6 +280,13 @@ def detect_active_port_with_retry(
     import time
 
     for attempt in range(max_retries):
+        if should_stop and should_stop():
+            return DetectionResult(
+                port=None,
+                method="mac_delta",
+                confidence="low",
+                warnings=["Тест остановлен оператором"],
+            )
         result = detect_active_port(
             adapter, session, baseline, ports, shutdown_ports
         )
