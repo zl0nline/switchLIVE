@@ -422,14 +422,14 @@ def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
 
 
 def _uplink_skip_indexes(ports: list[PortInfo], detected_uplink: PortInfo | None) -> set[int]:
+    if detected_uplink:
+        return {detected_uplink.index}
+
     candidates = _uplink_candidates(ports)
     if not candidates or len(candidates) == len(ports):
-        return {detected_uplink.index} if detected_uplink else set()
+        return set()
 
-    skip_indexes = {port.index for port in candidates}
-    if detected_uplink:
-        skip_indexes.add(detected_uplink.index)
-    return skip_indexes
+    return {port.index for port in candidates}
 
 
 def _dedupe_ports(ports: list[PortInfo]) -> list[PortInfo]:

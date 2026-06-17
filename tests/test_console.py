@@ -198,14 +198,14 @@ class TestUplinkPreflight:
         assert detected.index == 9
         assert "Аплинк готов: порт 9" in _strip_ansi(capsys.readouterr().out)
 
-    def test_uplink_skip_indexes_skips_candidate_block_when_uplink_detected(self):
+    def test_uplink_skip_indexes_uses_detected_port(self):
         ports = [
             PortInfo(index=1, name="1", type=PortType.COPPER),
             PortInfo(index=9, name="9", type=PortType.COMBO, role="combo"),
             PortInfo(index=10, name="10", type=PortType.COMBO, role="combo"),
         ]
 
-        assert _uplink_skip_indexes(ports, ports[2]) == {9, 10}
+        assert _uplink_skip_indexes(ports, ports[2]) == {10}
 
     def test_uplink_skip_indexes_skips_candidates_after_manual_continue(self):
         ports = [
