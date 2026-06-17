@@ -96,11 +96,13 @@ def run_discovery(
     detectors = get_all_detectors()
     _progress(f"Зарегистрировано детекторов: {len(detectors)}")
 
+    any_console_output = False
+
     for port_info in ports:
         port_name = port_info.name
         _progress(f"Проверка порта {port_name}...")
 
-        result = _try_port(
+        result, had_output = _try_port(
             port_name,
             standard_creds,
             manual_credential_callback,
@@ -108,8 +110,22 @@ def run_discovery(
             _progress,
         )
 
+        if had_output:
+            any_console_output = True
+
         if result and result.found:
             return result
+
+    if not any_console_output:
+        _progress("Устройство не найдено ни на одном порту")
+        return DiscoveryResult(
+            found=False,
+            error=(
+                "Нет ответа от консоли ни на одной скорости (9600, 115200). "
+                "Возможно, коммутатор не работает. "
+                "Попробуйте перезагрузить коммутатор по питанию и повторить."
+            ),
+        )
 
     _progress("Устройство не найдено ни на одном порту")
     return DiscoveryResult(found=False, error="Устройство не обнаружено")
@@ -121,10 +137,14 @@ def _try_port(
     manual_credential_callback,
     detectors: list[DeviceDetector],
     progress,
-) -> DiscoveryResult | None:
-    """Попробовать найти устройство на конкретном порту."""
+) -> tuple[DiscoveryResult | None, bool]:
+    """Попробовать найти устройство на конкретном порту.
+
+    Returns: (result, had_any_output)
+    """
     baudrates = (9600, 115200)
     manual_baudrates: list[int] = []
+    had_any_output = False
 
     for baudrate in baudrates:
         result, had_console_output = _try_baudrate(
@@ -136,9 +156,10 @@ def _try_port(
             progress=progress,
         )
         if result:
-            return result
+            return result, True
         if had_console_output:
             manual_baudrates.append(baudrate)
+            had_any_output = True
 
     if manual_credential_callback:
         for baudrate in manual_baudrates:
@@ -151,9 +172,9 @@ def _try_port(
                 progress=progress,
             )
             if result:
-                return result
+                return result, True
 
-    return None
+    return None, had_any_output
 
 
 def _try_baudrate(

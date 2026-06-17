@@ -235,7 +235,20 @@ class TestRunDiscovery:
         ) is True
 
     def test_has_auth_console_output_rejects_garbled_baudrate(self):
-        assert _has_auth_console_output("\x10b��\\BH�\x10\",�\x1c�3�") is False
+        assert _has_auth_console_output("garbage bytes") is False
+
+    def test_dead_switch_no_output_suggests_reboot(self):
+        """Если коммутатор вообще не отвечает — подсказка про перезагрузку."""
+        mock_port = MagicMock()
+        mock_port.name = "/dev/ttyUSB0"
+
+        with patch("switchlive.app.discovery.list_serial_ports", return_value=[mock_port]):
+            with patch("switchlive.app.discovery._try_port", return_value=(None, False)):
+                result = run_discovery(standard_logins_path="nonexistent.txt")
+
+        assert result.found is False
+        assert result.error is not None
+        assert "перезагрузить" in result.error.lower() or "не работает" in result.error.lower()
 
     def test_found_on_first_port(self):
         """Устройство найдено — интеграционный тест через mock transport."""
@@ -285,7 +298,7 @@ class TestRunDiscovery:
             return found, True
 
         with patch("switchlive.app.discovery._try_baudrate", side_effect=fake_try_baudrate):
-            result = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
+            result, _ = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
 
         assert result is found
         assert calls == [None, None]
@@ -301,7 +314,7 @@ class TestRunDiscovery:
             return None, True
 
         with patch("switchlive.app.discovery._try_baudrate", side_effect=fake_try_baudrate):
-            result = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
+            result, _ = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
 
         assert result is None
         assert calls == [None, None, manual_callback, manual_callback]
