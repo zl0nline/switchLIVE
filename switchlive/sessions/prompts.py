@@ -50,6 +50,18 @@ COMMAND_PROMPTS: dict[str, list[str]] = {
         r"[\w\-_.]+>",            # Edge-Core user mode
         r"[\w\-_.]+#",            # Edge-Core enable mode
     ],
+    # Универсальный режим для discovery — неизвестно, какой вендор на линии.
+    # Включает паттерны всех вендоров, чтобы детектить промпты любого устройства.
+    "discovery": [
+        # D-Link (двоеточие в промпте)
+        r"[\w\-_.]+:[\w\-_.]*[>#]",  # device:# device:admin# device:>
+        # Cisco / Eltex / Edge-Core (без двоеточия)
+        r"[\w\-_.]+>\s*$",           # switch>
+        r"[\w\-_.]+#\s*$",           # switch#
+        # Huawei
+        r"<[\w\-_.]+>",              # <HUAWEI>
+        r"\[[\w\-_.]+\]",            # [HUAWEI]
+    ],
     "generic": [
         r"[\w\-_.]+[>#]\s*$",
         r"[\w\-_.]+:\w+\s*$",

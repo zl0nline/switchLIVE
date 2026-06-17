@@ -125,6 +125,29 @@ class TestPrompts:
     def test_find_command_prompt_none(self):
         assert find_command_prompt("random text", "generic") is None
 
+    def test_find_command_prompt_discovery_dlink(self):
+        """Discovery vendor матчит D-Link промпты."""
+        assert find_command_prompt("DGS-3000:>", "discovery") == "DGS-3000:>"
+        assert find_command_prompt("DGS-3000:#", "discovery") == "DGS-3000:#"
+        assert find_command_prompt("DGS-3000-10TC:admin#", "discovery") == "DGS-3000-10TC:admin#"
+
+    def test_find_command_prompt_discovery_eltex(self):
+        """Discovery vendor матчит Eltex промпты."""
+        assert find_command_prompt("MES2324#", "discovery") == "MES2324#"
+        assert find_command_prompt("MES2324>", "discovery") == "MES2324>"
+
+    def test_find_command_prompt_discovery_cisco(self):
+        """Discovery vendor матчит Cisco промпты."""
+        assert find_command_prompt("switch#", "discovery") == "switch#"
+        assert find_command_prompt("switch>", "discovery") == "switch>"
+
+    def test_find_command_prompt_discovery_no_false_positive(self):
+        """Discovery vendor не должен матчить login/password промпты."""
+        assert find_command_prompt("User Name:", "discovery") is None
+        assert find_command_prompt("Password:", "discovery") is None
+        assert find_command_prompt("authentication failed", "discovery") is None
+        assert find_command_prompt("Version 1.0.23", "discovery") is None
+
     def test_find_command_prompt_fallback_generic(self):
         """Unknown vendor falls back to generic."""
         assert find_command_prompt("host>", "unknown_vendor") is not None
@@ -216,6 +239,46 @@ class TestCLISession:
         creds = Credentials(username="admin", password="admin")
         assert session.login(creds) is True
         assert session.prompt == "MES2324#"
+
+    def test_login_eltex_auth_retry_loop_with_cr_only(self):
+        """CR-only отправка не должна зацикливать Eltex auth retry.
+
+        Имитирует реальный сценарий: после 9600 baud мусор оставил Eltex
+        в состоянии auth-failed. При 115200 первый \r получает retry screen,
+        второй \r — чистый User Name prompt.
+        """
+        t = MockTransport()
+        # Первый \r: device на retry screen → показывает retry screen снова
+        t.add_response(
+            b"\r\nauthentication failed\r\n"
+            b"\r\npress ENTER key to retry authentication\r\n"
+        )
+        # Второй \r: retry обработан → чистый User Name
+        t.add_response(b"\r\nUser Name:\r\n")
+        t.add_response(b"\r\nPassword:\r\n")
+        t.add_response(b"\r\nMES2324B#")
+        t.open()
+
+        session = CLISession(t, vendor="eltex")
+        creds = Credentials(username="admin", password="admin")
+        assert session.login(creds) is True
+        assert session.prompt == "MES2324B#"
+
+    def test_login_uses_cr_not_crlf(self):
+        """Все отправки в login flow должны использовать CR (\r), не CRLF (\r\n)."""
+        t = MockTransport()
+        t.add_response(b"Login: ")
+        t.add_response(b"Password: ")
+        t.add_response(b"switch:>")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        creds = Credentials(username="admin", password="secret")
+        assert session.login(creds) is True
+
+        # Проверяем что ни одна отправка не содержит \r\n
+        for written in t.written:
+            assert b"\r\n" not in written, f"CRLF found in TX: {written!r}"
 
     def test_login_multiline_chunk(self):
         """Многострочный чанк: Login + Password + prompt в одном."""

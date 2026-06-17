@@ -109,6 +109,10 @@ class SerialTransport(CommandTransport):
                 stopbits=self.stopbits,
                 timeout=self.timeout,
             )
+            # Очистить входной буфер от мусора от предыдущих попыток
+            # на другом baudrate (garbage от 9600 при реальных 115200)
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
             log.info("Serial port opened: %s @ %d baud", self.port, self.baudrate)
         except serial.SerialException as e:
             details = str(e)

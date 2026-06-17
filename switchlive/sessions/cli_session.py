@@ -79,8 +79,8 @@ class CLISession(DeviceSession):
         self._transcript = ""
 
         try:
-            # Шаг 1: «подёргать» — отправить Enter, получить первый чанк
-            chunk = self._send_and_read(b"\r\n", self.prompt_timeout)
+            # Шаг 1: «подёргать» — отправить Enter (только CR), получить первый чанк
+            chunk = self._send_and_read(b"\r", self.prompt_timeout)
 
             # Уже в командном режиме?
             prompt = find_command_prompt_current(chunk, self.vendor)
@@ -89,13 +89,19 @@ class CLISession(DeviceSession):
                 log.info("Already at command prompt: %s", prompt)
                 return True
 
-            if contains_auth_retry(chunk):
-                chunk = self._send_and_read(b"\r\n", self.prompt_timeout)
+            # Auth retry screen? (Eltex: "press ENTER key to retry authentication")
+            # Важно: отправляем только \r, не \r\n — иначе LF воспринимается
+            # как пустой ввод в User Name и цикл auth-failed зацикливается.
+            # Если в чанке уже есть login prompt — не трогаем, переходим к логину.
+            auth_retries = 0
+            while contains_auth_retry(chunk) and not match_login_current(chunk) and auth_retries < 3:
+                chunk = self._send_and_read(b"\r", self.prompt_timeout)
+                auth_retries += 1
 
             # Шаг 2: login prompt?
             if match_login_current(chunk):
                 chunk = self._send_and_read(
-                    credentials.username.encode() + b"\r\n",
+                    credentials.username.encode() + b"\r",
                     self.prompt_timeout,
                 )
             # Шаг 3: password prompt?
@@ -174,9 +180,9 @@ class CLISession(DeviceSession):
 
         to = timeout or self.command_timeout
 
-        # Отправить команду
+        # Отправить команду (CR only — serial consoles не ожидают LF)
         chunk = self._send_and_read(
-            command.encode() + b"\r\n", to
+            command.encode() + b"\r", to
         )
 
         # Обработка пейджера
@@ -236,7 +242,7 @@ class CLISession(DeviceSession):
     def _send_secret_and_read(self, secret: str, timeout: float) -> str:
         """Отправить пароль (без попадания в логи), прочитать ответ."""
         log.debug("TX: ***")
-        self.transport.write(secret.encode() + b"\r\n")
+        self.transport.write(secret.encode() + b"\r")
         time.sleep(0.3)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")

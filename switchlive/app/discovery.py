@@ -170,7 +170,7 @@ def _try_baudrate(
         progress(f"  Не удалось открыть {port_name}: {e}")
         return None, False
 
-    session = CLISession(transport, vendor="dlink")
+    session = CLISession(transport, vendor="discovery")
     keep_open = False
     try:
         auth_method = _try_login(session, standard_creds, manual_callback, progress)
