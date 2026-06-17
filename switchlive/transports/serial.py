@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from switchlive.core.errors import TransportError
@@ -50,7 +51,23 @@ def list_serial_ports() -> list[SerialPortInfo]:
         )
         ports.append(info)
 
-    return ports
+    preferred = [port for port in ports if _is_preferred_serial_port(port.name)]
+    candidates = preferred or ports
+    return sorted(candidates, key=_serial_port_sort_key)
+
+
+def _is_preferred_serial_port(name: str) -> bool:
+    """USB-console adapters before onboard/kernel ttyS noise."""
+    return bool(re.search(r"/dev/(ttyUSB|ttyACM|serial/by-id/|rfcomm)", name))
+
+
+def _serial_port_sort_key(port: SerialPortInfo) -> tuple[int, str]:
+    name = port.name
+    if re.search(r"/dev/(ttyUSB|ttyACM|serial/by-id/|rfcomm)", name):
+        return (0, name)
+    if re.search(r"/dev/ttyS\d+$", name):
+        return (2, name)
+    return (1, name)
 
 
 class SerialTransport(CommandTransport):

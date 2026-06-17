@@ -192,6 +192,10 @@ def _try_login(
     except SessionError:
         pass
 
+    if not session.transcript.strip():
+        progress("  Нет ответа от консоли на этом baudrate")
+        return None
+
     # 2. Стандартные логины
     for cred in standard_creds:
         try:

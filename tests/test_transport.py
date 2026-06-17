@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from switchlive.core.errors import TransportError
@@ -55,6 +57,23 @@ def test_list_serial_ports_returns_list():
     """list_serial_ports возвращает список (может быть пустым)."""
     ports = list_serial_ports()
     assert isinstance(ports, list)
+
+
+def test_list_serial_ports_prefers_usb_adapters(monkeypatch):
+    """Если есть USB-console, не шумим kernel ttyS0..31."""
+    fake_ports = [
+        SimpleNamespace(device="/dev/ttyS0", description="", hwid="", vid=None, pid=None, serial_number=None),
+        SimpleNamespace(device="/dev/ttyUSB0", description="", hwid="", vid=None, pid=None, serial_number=None),
+        SimpleNamespace(device="/dev/ttyS1", description="", hwid="", vid=None, pid=None, serial_number=None),
+    ]
+
+    from serial.tools import list_ports
+
+    monkeypatch.setattr(list_ports, "comports", lambda: fake_ports)
+
+    ports = list_serial_ports()
+
+    assert [port.name for port in ports] == ["/dev/ttyUSB0"]
 
 
 def test_command_transport_is_abstract():

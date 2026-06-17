@@ -107,6 +107,7 @@ class TestPrompts:
     def test_find_command_prompt_dlink(self):
         assert find_command_prompt("DES-1228:>", "dlink") == "DES-1228:>"
         assert find_command_prompt("SWITCH:#", "dlink") == "SWITCH:#"
+        assert find_command_prompt("DGS-3000-10TC:admin#", "dlink") == "DGS-3000-10TC:admin#"
 
     def test_find_command_prompt_cisco(self):
         assert find_command_prompt("Switch>", "cisco") == "Switch>"
@@ -169,6 +170,16 @@ class TestCLISession:
         assert session.login(Credentials()) is True
         assert session.is_ready() is True
         assert session.prompt == "switch:>"
+
+    def test_login_already_at_dlink_prompt_with_username(self):
+        """D-Link может включать username в prompt: DGS-3000-10TC:admin#."""
+        t = MockTransport()
+        t.add_response(b"\r\nDGS-3000-10TC:admin#\r\n")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        assert session.login(Credentials()) is True
+        assert session.prompt == "DGS-3000-10TC:admin#"
 
     def test_login_with_credentials(self):
         """Полный цикл: login → password → prompt (отдельные чанки)."""

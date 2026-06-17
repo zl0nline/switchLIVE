@@ -32,6 +32,7 @@ COMMAND_PROMPTS: dict[str, list[str]] = {
     "dlink": [
         r"[\w\-_.]+:>",           # D-Link user mode
         r"[\w\-_.]+:#",           # D-Link enable mode
+        r"[\w\-_.]+:[\w\-_.]+[>#]",  # D-Link prompt with username
     ],
     "cisco": [
         r"[\w\-_.]+>",            # Cisco user mode
