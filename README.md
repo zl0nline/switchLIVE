@@ -24,15 +24,24 @@
 
 ## Установка
 
+На Linux-стенде используйте инсталлятор. Он ставит системные зависимости,
+ставит `switchlive` через `pipx`, создаёт рабочие config-файлы из примеров и
+добавляет текущего пользователя в serial-группу (`dialout`/`uucp`):
+
 ```bash
 git clone https://github.com/zl0nline/switchLIVE.git
 cd switchLIVE
+./scripts/install-linux.sh
+```
 
-python3 -m venv .venv
-. .venv/bin/activate
+После добавления в группу нужно перелогиниться или открыть новую сессию через
+`newgrp dialout`, иначе Linux ещё не даст доступ к `/dev/ttyUSB*`.
 
-pip install --upgrade pip
-pip install -e ".[dev]"
+Для разработки можно ставить отдельно в локальное окружение, но на стенде venv
+не нужен.
+
+```bash
+python3 -m pip install -e ".[dev]"
 ```
 
 Python 3.10+ обязателен.
@@ -41,12 +50,6 @@ Python 3.10+ обязателен.
 
 ```bash
 switchlive
-```
-
-или:
-
-```bash
-python -m switchlive
 ```
 
 С явным конфигом:
@@ -105,7 +108,9 @@ username password [enable_password]
 
 - `iperf3` — нужен только для traffic test.
 - Доступ к serial device: `/dev/ttyUSB*` или `/dev/ttyACM*`.
-- На Linux пользователь обычно должен быть в группе `dialout`.
+- На Linux пользователь должен быть в serial-группе (`dialout` или `uucp`).
+- Не запускайте `switchlive` через `sudo`: root может не видеть Python-пакеты,
+  поставленные для оператора, и discovery покажет, что `pyserial` не установлен.
 
 Подробная подготовка control host, test host, serial permissions и PoE camera
 mode описана в [docs/FIELD_SETUP.md](docs/FIELD_SETUP.md).
@@ -159,8 +164,9 @@ history и автоматическая генерация отчётов из �
 ## Проверки разработки
 
 ```bash
-.venv/bin/pytest
-.venv/bin/ruff check .
+python3 -m pip install -e ".[dev]"
+python3 -m pytest
+python3 -m ruff check .
 ```
 
 ## Документация

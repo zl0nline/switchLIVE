@@ -52,6 +52,14 @@ def _print_menu() -> None:
     print()
 
 
+def _print_bottom_menu() -> None:
+    print()
+    print("-" * 50)
+    print("  Команды: 1 определить | 2 тест | 3 история | 4 настройки | 5 debug | 0 выход")
+    print("-" * 50)
+    print()
+
+
 def _manual_credential_prompt(standard_creds: list[Credentials]) -> Credentials | None:
     """Запрос логина/пароля у оператора."""
     print()
@@ -132,16 +140,22 @@ def show_start_menu(
             break
         elif choice == "1":
             _handle_discovery(config)
+            _print_bottom_menu()
         elif choice == "2":
             _handle_test_menu(config)
+            _print_bottom_menu()
         elif choice == "3":
             print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
+            _print_bottom_menu()
         elif choice == "4":
             print("\n  ⚠️ Настройки — ещё не реализовано\n")
+            _print_bottom_menu()
         elif choice == "5":
             _handle_debug_bundle(config, config_path, debug_context)
+            _print_bottom_menu()
         else:
             print("\n  ❌ Неизвестная команда\n")
+            _print_bottom_menu()
 
 
 def _handle_debug_bundle(

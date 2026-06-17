@@ -26,7 +26,7 @@ from switchlive.devices.dlink import DLinkAdapter, DLinkDetector  # noqa: F401 �
 from switchlive.devices.eltex import EltexAdapter, EltexDetector  # noqa: F401 — регистрация
 from switchlive.devices.registry import get_all_detectors
 from switchlive.sessions.cli_session import CLISession
-from switchlive.transports.serial import SerialTransport, list_serial_ports
+from switchlive.transports.serial import SerialTransport, is_pyserial_available, list_serial_ports
 
 log = logging.getLogger(__name__)
 
@@ -72,8 +72,21 @@ def run_discovery(
     # Получить список портов
     ports = list_serial_ports()
     if not ports:
+        if not is_pyserial_available():
+            error = (
+                "pyserial не установлен в текущем Python-окружении. "
+                "Запустите scripts/install-linux.sh и затем switchlive без sudo."
+            )
+            _progress(error)
+            return DiscoveryResult(found=False, error=error)
         _progress("COM-порты не найдены")
-        return DiscoveryResult(found=False, error="Нет доступных COM-портов")
+        return DiscoveryResult(
+            found=False,
+            error=(
+                "Нет доступных COM-портов. Проверьте USB-console адаптер, "
+                "группу dialout/uucp и перезапустите сессию пользователя; sudo не нужен."
+            ),
+        )
 
     _progress(f"Найдено COM-портов: {len(ports)}")
 

@@ -9,6 +9,7 @@ from switchlive.core.models import PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
     _configure_walk_test,
     _format_port_result,
+    _print_bottom_menu,
     _progress_bar,
     _run_discovery_wizard,
     _verdict_label,
@@ -39,6 +40,12 @@ class TestConsoleFormatting:
         text = _strip_ansi(_format_port_result(result))
         assert "Порт 25" in text
         assert "sfp_plus" in text
+
+    def test_bottom_menu_contains_exit_hint(self, capsys):
+        _print_bottom_menu()
+        text = capsys.readouterr().out
+        assert "Команды:" in text
+        assert "0 выход" in text
 
 
 class TestConfigureWalkTest:

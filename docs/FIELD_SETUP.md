@@ -13,13 +13,13 @@ Debian/Ubuntu:
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv python3-pip iperf3
+sudo apt install -y git python3 python3-pip pipx iperf3
 ```
 
 Fedora:
 
 ```bash
-sudo dnf install -y git python3 python3-pip iperf3
+sudo dnf install -y git python3 python3-pip pipx iperf3
 ```
 
 Python 3.10 or newer is required.
@@ -27,7 +27,8 @@ Python 3.10 or newer is required.
 ### Serial permissions
 
 Most USB console adapters appear as `/dev/ttyUSB0` or `/dev/ttyACM0`.
-Add your user to the serial group, then log out and back in:
+The installer below adds your user to the serial group. If you need to do it
+manually, add the operator user to `dialout` and then log out and back in:
 
 ```bash
 sudo usermod -aG dialout "$USER"
@@ -45,29 +46,32 @@ Common symptoms:
 - `Permission denied`: user is not in `dialout`, or the session was not restarted.
 - `No such file`: adapter was not detected or uses a different device name.
 - Empty console output: wrong baudrate, wrong cable, or the switch is still booting.
+- `pyserial не установлен`: do not run through `sudo`; install with
+  `scripts/install-linux.sh` and run `switchlive` as the operator user.
 
 ### Install switchLIVE
 
 ```bash
 git clone https://github.com/zl0nline/switchLIVE.git
 cd switchLIVE
-python3 -m venv .venv
-. .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev]"
+./scripts/install-linux.sh
 ```
 
-Run:
+The installer:
+
+- installs `git`, `python3`, `pipx` and `iperf3`;
+- installs `switchlive` with runtime dependencies, including `pyserial`;
+- creates `switchlive.json` and `standart_login.txt` from examples if missing;
+- adds the operator user to `dialout`/`uucp` when those groups exist.
+
+After install, log out and back in so group membership is refreshed. Then run:
 
 ```bash
 switchlive
 ```
 
-or:
-
-```bash
-python -m switchlive
-```
+Do not use `sudo switchlive`. If the serial port says `Permission denied`, the
+current login session has not picked up the new group yet.
 
 ## Config files
 

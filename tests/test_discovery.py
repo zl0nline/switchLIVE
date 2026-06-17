@@ -202,9 +202,27 @@ class TestRunDiscovery:
     def test_no_ports(self):
         """Нет COM-портов — ошибка."""
         with patch("switchlive.app.discovery.list_serial_ports", return_value=[]):
-            result = run_discovery()
+            with patch("switchlive.app.discovery.is_pyserial_available", return_value=True):
+                result = run_discovery()
         assert result.found is False
         assert "COM-порт" in result.error
+
+    def test_no_pyserial(self):
+        """Нет pyserial в текущем Python — понятная ошибка."""
+        with patch("switchlive.app.discovery.list_serial_ports", return_value=[]):
+            with patch("switchlive.app.discovery.is_pyserial_available", return_value=False):
+                result = run_discovery()
+        assert result.found is False
+        assert "pyserial" in result.error
+        assert "sudo" in result.error
+
+    def test_no_ports_progress_reports_pyserial(self):
+        messages = []
+        with patch("switchlive.app.discovery.list_serial_ports", return_value=[]):
+            with patch("switchlive.app.discovery.is_pyserial_available", return_value=False):
+                result = run_discovery(progress_callback=messages.append)
+        assert result.found is False
+        assert any("pyserial" in message for message in messages)
 
     def test_found_on_first_port(self):
         """Устройство найдено — интеграционный тест через mock transport."""

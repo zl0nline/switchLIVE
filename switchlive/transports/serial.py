@@ -18,12 +18,24 @@ from switchlive.transports.base import CommandTransport, SerialPortInfo
 log = logging.getLogger(__name__)
 
 
+def is_pyserial_available() -> bool:
+    """Проверить, доступен ли runtime dependency pyserial."""
+    try:
+        import serial  # noqa: F401, PLC0415
+    except ImportError:
+        return False
+    return True
+
+
 def list_serial_ports() -> list[SerialPortInfo]:
     """Вернуть список доступных serial/COM портов."""
     try:
         from serial.tools import list_ports  # noqa: PLC0415
     except ImportError:
-        log.warning("pyserial не установлен — список портов недоступен")
+        log.warning(
+            "pyserial не установлен — список портов недоступен. "
+            "Запустите scripts/install-linux.sh или установите switchlive через pipx."
+        )
         return []
 
     ports = []
@@ -82,7 +94,13 @@ class SerialTransport(CommandTransport):
             )
             log.info("Serial port opened: %s @ %d baud", self.port, self.baudrate)
         except serial.SerialException as e:
-            raise TransportError(f"Не удалось открыть {self.port}: {e}") from e
+            details = str(e)
+            if "Permission denied" in details:
+                details += (
+                    ". Нет доступа к serial-порту: добавьте пользователя в группу dialout "
+                    "и перелогиньтесь, не запускайте switchlive через sudo."
+                )
+            raise TransportError(f"Не удалось открыть {self.port}: {details}") from e
         except Exception as e:
             raise TransportError(f"Ошибка при открытии {self.port}: {e}") from e
 
