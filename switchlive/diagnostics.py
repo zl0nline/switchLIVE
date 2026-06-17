@@ -75,14 +75,14 @@ def configure_logging(
     debug: bool = False,
     log_dir: str | Path = "logs",
 ) -> DebugContext:
-    """Configure console logging and optional debug log file."""
+    """Configure quiet console logging and optional debug log file."""
     context = DebugContext(enabled=debug, log_dir=Path(log_dir))
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)
 
     console = logging.StreamHandler()
-    console.setLevel(logging.INFO if debug else logging.WARNING)
+    console.setLevel(logging.ERROR)
     console.setFormatter(RedactingFormatter(LOG_FORMAT, DATE_FORMAT))
     root.addHandler(console)
 

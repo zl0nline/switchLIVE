@@ -5,8 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from switchlive.app.discovery import (
+    DiscoveryResult,
     _create_adapter,
     _try_login,
+    _try_port,
     run_discovery,
 )
 from switchlive.core.credentials import Credentials
@@ -258,3 +260,37 @@ class TestRunDiscovery:
         assert result.found is True
         assert result.identity is not None
         assert result.identity.model == "DES-1228"
+
+    def test_try_port_checks_all_baudrates_before_manual_login(self):
+        manual_callback = MagicMock()
+        detector = MagicMock()
+        found = DiscoveryResult(found=True)
+        calls = []
+
+        def fake_try_baudrate(*args, **kwargs):
+            calls.append(kwargs["manual_callback"])
+            if len(calls) == 1:
+                return None, True
+            return found, True
+
+        with patch("switchlive.app.discovery._try_baudrate", side_effect=fake_try_baudrate):
+            result = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
+
+        assert result is found
+        assert calls == [None, None]
+        manual_callback.assert_not_called()
+
+    def test_try_port_defers_manual_login_until_auto_baudrates_fail(self):
+        manual_callback = MagicMock()
+        detector = MagicMock()
+        calls = []
+
+        def fake_try_baudrate(*args, **kwargs):
+            calls.append(kwargs["manual_callback"])
+            return None, True
+
+        with patch("switchlive.app.discovery._try_baudrate", side_effect=fake_try_baudrate):
+            result = _try_port("/dev/ttyUSB0", [], manual_callback, [detector], lambda msg: None)
+
+        assert result is None
+        assert calls == [None, None, manual_callback, manual_callback]

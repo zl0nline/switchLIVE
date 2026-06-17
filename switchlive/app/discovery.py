@@ -121,56 +121,99 @@ def _try_port(
     progress,
 ) -> DiscoveryResult | None:
     """Попробовать найти устройство на конкретном порту."""
-    transport = SerialTransport(port=port_name)
+    baudrates = (9600, 115200)
+    manual_baudrates: list[int] = []
 
+    for baudrate in baudrates:
+        result, had_console_output = _try_baudrate(
+            port_name,
+            baudrate,
+            standard_creds,
+            manual_callback=None,
+            detectors=detectors,
+            progress=progress,
+        )
+        if result:
+            return result
+        if had_console_output:
+            manual_baudrates.append(baudrate)
+
+    if manual_credential_callback:
+        for baudrate in manual_baudrates:
+            result, _ = _try_baudrate(
+                port_name,
+                baudrate,
+                standard_creds=[],
+                manual_callback=manual_credential_callback,
+                detectors=detectors,
+                progress=progress,
+            )
+            if result:
+                return result
+
+    return None
+
+
+def _try_baudrate(
+    port_name: str,
+    baudrate: int,
+    standard_creds: list[Credentials],
+    manual_callback,
+    detectors: list[DeviceDetector],
+    progress,
+) -> tuple[DiscoveryResult | None, bool]:
+    transport = SerialTransport(port=port_name, baudrate=baudrate)
     try:
         transport.open()
     except TransportError as e:
         progress(f"  Не удалось открыть {port_name}: {e}")
-        return None
+        return None, False
 
-    # Попробовать разные бодрейты (9600 — стандарт, но иногда 115200)
-    for baudrate in (9600, 115200):
-        if baudrate != 9600:
-            transport.close()
-            transport = SerialTransport(port=port_name, baudrate=baudrate)
-            try:
-                transport.open()
-            except TransportError:
-                continue
-
-        session = CLISession(transport, vendor="dlink")
-
-        # Попытки логина
-        auth_method = _try_login(session, standard_creds, manual_credential_callback, progress)
-
+    session = CLISession(transport, vendor="dlink")
+    keep_open = False
+    try:
+        auth_method = _try_login(session, standard_creds, manual_callback, progress)
+        had_console_output = bool(session.transcript.strip())
         if auth_method is None:
-            continue  # не удалось войти на этом бодрейте
+            return None, had_console_output
 
-        # Прогнать детекторы
-        for detector in detectors:
-            try:
-                if detector.can_detect(session):
-                    progress(f"  Детектор {type(detector).__name__}: совпадение!")
-                    identity = detector.identify(session)
-                    adapter = _create_adapter(identity)
-                    session.vendor = adapter.profile.prompt_vendor
-                    _disable_paging(session, adapter, progress)
-                    return DiscoveryResult(
-                        found=True,
-                        identity=identity,
-                        adapter=adapter,
-                        session=session,
-                        port=port_name,
-                        auth_method=auth_method,
-                    )
-            except Exception as e:
-                progress(f"  Детектор {type(detector).__name__}: ошибка — {e}")
+        result = _detect_device(port_name, session, auth_method, detectors, progress)
+        if result:
+            keep_open = True
+            return result, had_console_output
+        return None, had_console_output
+    finally:
+        if not keep_open:
+            transport.close()
 
-        # Ни один детектор не сработал
-        progress(f"  Устройство на {port_name} не распознано (ни один детектор)")
 
-    transport.close()
+def _detect_device(
+    port_name: str,
+    session: CLISession,
+    auth_method: str,
+    detectors: list[DeviceDetector],
+    progress,
+) -> DiscoveryResult | None:
+    for detector in detectors:
+        try:
+            if detector.can_detect(session):
+                progress(f"  Детектор {type(detector).__name__}: совпадение!")
+                identity = detector.identify(session)
+                adapter = _create_adapter(identity)
+                session.vendor = adapter.profile.prompt_vendor
+                _disable_paging(session, adapter, progress)
+                return DiscoveryResult(
+                    found=True,
+                    identity=identity,
+                    adapter=adapter,
+                    session=session,
+                    port=port_name,
+                    auth_method=auth_method,
+                )
+        except Exception as e:
+            progress(f"  Детектор {type(detector).__name__}: ошибка — {e}")
+
+    progress(f"  Устройство на {port_name} не распознано (ни один детектор)")
     return None
 
 
