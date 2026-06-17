@@ -16,6 +16,7 @@ from switchlive.ui.console import (
     _print_bottom_menu,
     _progress_bar,
     _run_discovery_wizard,
+    _uplink_skip_indexes,
     _verdict_label,
     _wait_for_uplink,
     show_start_menu,
@@ -196,3 +197,21 @@ class TestUplinkPreflight:
         assert detected is not None
         assert detected.index == 9
         assert "Аплинк готов: порт 9" in _strip_ansi(capsys.readouterr().out)
+
+    def test_uplink_skip_indexes_uses_detected_port(self):
+        ports = [
+            PortInfo(index=1, name="1", type=PortType.COPPER),
+            PortInfo(index=9, name="9", type=PortType.COMBO, role="combo"),
+            PortInfo(index=10, name="10", type=PortType.COMBO, role="combo"),
+        ]
+
+        assert _uplink_skip_indexes(ports, ports[2]) == {10}
+
+    def test_uplink_skip_indexes_skips_candidates_after_manual_continue(self):
+        ports = [
+            PortInfo(index=1, name="1", type=PortType.COPPER),
+            PortInfo(index=9, name="9", type=PortType.COMBO, role="combo"),
+            PortInfo(index=10, name="10", type=PortType.COMBO, role="combo"),
+        ]
+
+        assert _uplink_skip_indexes(ports, None) == {9, 10}

@@ -269,14 +269,15 @@ def _handle_test_menu(config: Config) -> None:
     if not uplink_ready:
         return
 
-    skip_ports = {uplink.index} if uplink else set()
+    skip_ports = _uplink_skip_indexes(ports, uplink)
     test_config = _configure_walk_test(config, skip_port_indexes=skip_ports)
     engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
+    progress_total = len(engine._filter_ports(ports))
     results = engine.run(
         ports=ports,
-        progress_callback=_make_walk_progress(len(ports)),
+        progress_callback=_make_walk_progress(progress_total),
     )
 
     _print_walk_summary(results)
@@ -418,6 +419,16 @@ def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
         if port.role in ("uplink", "combo")
         or port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO)
     ]
+
+
+def _uplink_skip_indexes(ports: list[PortInfo], detected_uplink: PortInfo | None) -> set[int]:
+    if detected_uplink:
+        return {detected_uplink.index}
+
+    candidates = _uplink_candidates(ports)
+    if not candidates or len(candidates) == len(ports):
+        return set()
+    return {port.index for port in candidates}
 
 
 def _dedupe_ports(ports: list[PortInfo]) -> list[PortInfo]:

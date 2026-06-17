@@ -10,7 +10,7 @@ from switchlive.app.port_detection import (
     detect_existing_uplink_by_mac_count,
     take_mac_baseline,
 )
-from switchlive.core.models import MacEntry, PortInfo
+from switchlive.core.models import LinkStatus, MacEntry, PortInfo
 
 
 def _make_adapter(mac_entries: list = None) -> MagicMock:
@@ -91,6 +91,20 @@ class TestDetectActivePort:
         assert result.port is None
         assert result.confidence == "low"
         assert len(result.warnings) > 0
+
+    def test_no_new_macs_detects_single_live_link(self):
+        """Если MAC не появился, но ожидаемый порт link up — порт найден."""
+        port = PortInfo(index=10, name="10")
+        live = PortInfo(index=10, name="10", link_status=LinkStatus.UP, actual_speed=100, duplex="Full")
+        adapter = MagicMock()
+        adapter.get_mac_table.return_value = []
+        adapter.list_ports.return_value = [live]
+
+        result = detect_active_port(adapter, _make_session(), {}, [port])
+
+        assert result.port is live
+        assert result.method == "link_status"
+        assert result.confidence == "medium"
 
     def test_multiple_active_ports(self):
         """Несколько портов с новыми MAC — неоднозначно."""
