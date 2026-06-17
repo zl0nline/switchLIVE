@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from switchlive.core.credentials import Credentials, load_standard_logins
@@ -254,7 +255,14 @@ def _try_login(
     for cred in standard_creds:
         # Пересоздаём сессию для каждой попытки — предыдущий login
         # мог оставить switch в состоянии auth-fail / lockout.
+        # Закрываем и открываем порт заново.
         session.reset()
+        try:
+            session.transport.close()
+            session.transport.open()
+            time.sleep(0.5)
+        except Exception:
+            pass
         try:
             if session.login(cred):
                 progress(f"  Вошли через стандартный логин: {cred.username}")
@@ -265,6 +273,12 @@ def _try_login(
     # 3. Ручной ввод
     if manual_callback:
         session.reset()
+        try:
+            session.transport.close()
+            session.transport.open()
+            time.sleep(0.5)
+        except Exception:
+            pass
         cred = manual_callback(standard_creds)
         if cred:
             try:
