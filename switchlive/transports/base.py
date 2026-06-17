@@ -45,6 +45,10 @@ class CommandTransport(abc.ABC):
         или не истечёт timeout.
         """
 
+    def reset_input_buffer(self) -> None:
+        """Сбросить входной буфер транспорта (по умолчанию: noop)."""
+
+
     @abc.abstractmethod
     def is_open(self) -> bool:
         """Соединение активно."""

@@ -226,6 +226,20 @@ class CLISession(DeviceSession):
     def is_ready(self) -> bool:
         return self._prompt is not None
 
+    def reset(self) -> None:
+        """Сбросить состояние сессии для повторной попытки логина.
+
+        Очищает промпт и транскрипт, но не закрывает транспорт.
+        Сбрасывает input buffer транспорта чтобы мусор от предыдущей
+        попытки не попал в следующую.
+        """
+        self._prompt = None
+        self._transcript = ""
+        try:
+            self.transport.reset_input_buffer()
+        except Exception:
+            log.debug("Transport reset_input_buffer not available or failed")
+
     # --- Внутренние методы ---
 
     def _send_and_read(self, data: bytes, timeout: float, delay: float = 0.1) -> str:

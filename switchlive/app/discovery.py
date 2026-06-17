@@ -252,6 +252,9 @@ def _try_login(
 
     # 2. Стандартные логины
     for cred in standard_creds:
+        # Пересоздаём сессию для каждой попытки — предыдущий login
+        # мог оставить switch в состоянии auth-fail / lockout.
+        session.reset()
         try:
             if session.login(cred):
                 progress(f"  Вошли через стандартный логин: {cred.username}")
@@ -261,6 +264,7 @@ def _try_login(
 
     # 3. Ручной ввод
     if manual_callback:
+        session.reset()
         cred = manual_callback(standard_creds)
         if cred:
             try:

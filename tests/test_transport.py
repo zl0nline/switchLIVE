@@ -106,6 +106,9 @@ class MockTransport(CommandTransport):
             return self._responses.pop(0)
         return b""
 
+    def reset_input_buffer(self) -> None:
+        pass  # mock: no-op
+
     def is_open(self) -> bool:
         return self._open
 
