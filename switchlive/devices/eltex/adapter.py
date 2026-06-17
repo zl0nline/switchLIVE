@@ -19,6 +19,18 @@ from switchlive.core.models import LinkStatus
 log = logging.getLogger(__name__)
 
 
+def _normalize_port_name(cli_name: str) -> str:
+    """Normalize port name to match switch output abbreviations.
+
+    gigabitethernet 1/0/24 -> gi1/0/24
+    tengigabitethernet 1/0/1 -> te1/0/1
+    """
+    name = cli_name.lower().replace(" ", "")
+    name = name.replace("gigabitethernet", "gi")
+    name = name.replace("tengigabitethernet", "te")
+    return name
+
+
 class EltexAdapter(DeviceAdapter):
     """Adapter for Eltex MES switches."""
 
@@ -50,7 +62,7 @@ class EltexAdapter(DeviceAdapter):
             result = session.run_command(self._profile.show_ports_cmd)
             live_status = parse_show_interfaces_status(result.output)
             for port in ports:
-                key = port.cli_name.lower().replace(" ", "")
+                key = _normalize_port_name(port.cli_name)
                 info = live_status.get(key)
                 if info:
                     if info["link_state"] == "up":
