@@ -15,6 +15,7 @@ from switchlive.ui.console import (
     _progress_bar,
     _run_discovery_wizard,
     _verdict_label,
+    show_start_menu,
 )
 
 
@@ -125,3 +126,13 @@ class TestConfigureWalkTest:
         assert cfg.run_traffic is False
         assert cfg.run_poe is True
         assert cfg.poe_camera_ip == "192.0.2.20"
+
+
+class TestConsoleInterrupts:
+    @patch("switchlive.ui.console._handle_test_menu", side_effect=KeyboardInterrupt)
+    @patch("builtins.input", return_value="2")
+    def test_ctrl_c_during_action_exits_cleanly(self, _input, _handler, capsys):
+        show_start_menu()
+
+        text = _strip_ansi(capsys.readouterr().out)
+        assert "Операция прервана оператором" in text

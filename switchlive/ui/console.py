@@ -195,30 +195,35 @@ def show_start_menu(
             print()
             break
 
-        if choice == "0":
-            print("  До свидания!")
+        try:
+            if choice == "0":
+                print("  До свидания!")
+                break
+            elif choice == "1":
+                _handle_discovery(config)
+                _print_bottom_menu()
+            elif choice == "2":
+                _handle_test_menu(config)
+                _print_bottom_menu()
+            elif choice == "3":
+                _handle_poe_test_menu(config)
+                _print_bottom_menu()
+            elif choice == "4":
+                print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
+                _print_bottom_menu()
+            elif choice == "5":
+                print("\n  ⚠️ Настройки — ещё не реализовано\n")
+                _print_bottom_menu()
+            elif choice == "6":
+                _handle_debug_bundle(config, config_path, debug_context)
+                _print_bottom_menu()
+            else:
+                print("\n  ❌ Неизвестная команда\n")
+                _print_bottom_menu()
+        except KeyboardInterrupt:
+            print()
+            print(_c("  Операция прервана оператором. Выход.", "yellow"))
             break
-        elif choice == "1":
-            _handle_discovery(config)
-            _print_bottom_menu()
-        elif choice == "2":
-            _handle_test_menu(config)
-            _print_bottom_menu()
-        elif choice == "3":
-            _handle_poe_test_menu(config)
-            _print_bottom_menu()
-        elif choice == "4":
-            print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
-            _print_bottom_menu()
-        elif choice == "5":
-            print("\n  ⚠️ Настройки — ещё не реализовано\n")
-            _print_bottom_menu()
-        elif choice == "6":
-            _handle_debug_bundle(config, config_path, debug_context)
-            _print_bottom_menu()
-        else:
-            print("\n  ❌ Неизвестная команда\n")
-            _print_bottom_menu()
 
 
 def _handle_debug_bundle(
