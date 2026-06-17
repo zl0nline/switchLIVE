@@ -100,6 +100,10 @@ class CLISession(DeviceSession):
 
             # Шаг 2: login prompt?
             if match_login_current(chunk):
+                # Если username пустой — не отправлять, чтобы не тратить
+                # попытку логина на устройствах с lockout (D-Link: 3 попытки)
+                if not credentials.username:
+                    raise SessionError("Требуется логин, но учётные данные не предоставлены")
                 chunk = self._send_and_read(
                     credentials.username.encode() + b"\r",
                     self.prompt_timeout,
