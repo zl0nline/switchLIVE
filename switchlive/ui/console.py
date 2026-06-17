@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import select
 import sys
 import time
 from datetime import datetime
@@ -41,6 +42,34 @@ ANSI = {
     "red": "\033[31m",
     "cyan": "\033[36m",
 }
+
+FINISH_COMMANDS = {"q", "quit", "stop", "finish", "end", "й", "стоп", "завершить", "0"}
+
+
+class _OperatorStopRequested(Exception):
+    """Raised when operator asks to finish and save partial results."""
+
+
+class _FinishKeyWatcher:
+    """Non-blocking terminal watcher for `q + Enter`."""
+
+    def __init__(self, stream=None) -> None:
+        self.stream = stream or sys.stdin
+        self._requested = False
+
+    def requested(self) -> bool:
+        if self._requested:
+            return True
+        try:
+            ready, _, _ = select.select([self.stream], [], [], 0)
+        except (OSError, ValueError):
+            return False
+        if not ready:
+            return False
+
+        line = self.stream.readline().strip().lower()
+        self._requested = line in FINISH_COMMANDS
+        return self._requested
 
 
 def _c(text: str, color: str) -> str:
@@ -277,16 +306,17 @@ def _handle_test_menu(config: Config) -> None:
     engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
-    print(_c("  Перед каждым портом: Enter — тестировать, q — закончить и сохранить отчёт.", "cyan"))
+    print(_c("  Тест идёт автоматически. Наберите q и Enter, чтобы закончить и сохранить отчёт.", "cyan"))
     progress_total = len(engine._filter_ports(ports))
     started_at = datetime.now()
+    watcher = _FinishKeyWatcher()
     try:
         results = engine.run(
             ports=ports,
-            progress_callback=_make_walk_progress(progress_total),
-            continue_callback=_continue_or_finish,
+            progress_callback=_make_stoppable_walk_progress(progress_total, watcher),
+            continue_callback=lambda port, number, total: not watcher.requested(),
         )
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, _OperatorStopRequested):
         print()
         print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
         results = engine.results
@@ -328,15 +358,16 @@ def _handle_poe_test_menu(config: Config) -> None:
     test_config = _configure_poe_test(config)
     engine = WalkTestEngine(adapter, session, test_config)
     _section("Ход PoE тестирования")
-    print(_c("  Перед каждым портом: Enter — тестировать, q — закончить и сохранить отчёт.", "cyan"))
+    print(_c("  Тест идёт автоматически. Наберите q и Enter, чтобы закончить и сохранить отчёт.", "cyan"))
     started_at = datetime.now()
+    watcher = _FinishKeyWatcher()
     try:
         results = engine.run(
             ports=poe_ports,
-            progress_callback=_make_walk_progress(len(poe_ports)),
-            continue_callback=_continue_or_finish,
+            progress_callback=_make_stoppable_walk_progress(len(poe_ports), watcher),
+            continue_callback=lambda port, number, total: not watcher.requested(),
         )
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, _OperatorStopRequested):
         print()
         print(_c("  [STOP] Тест остановлен оператором. Сохраняю частичный отчёт.", "yellow"))
         results = engine.results
@@ -411,16 +442,6 @@ def _persist_test_artifacts(
         print(f"     HTML: {finalize.html_report}")
     if finalize.csv_report:
         print(f"     CSV:  {finalize.csv_report}")
-
-
-def _continue_or_finish(port: PortInfo, number: int, total: int) -> bool:
-    try:
-        answer = input(f"  Порт {number}/{total}: Enter = тестировать {port.name}, q = закончить: ").strip().lower()
-    except EOFError:
-        return True
-    if answer in {"q", "quit", "stop", "finish", "end", "й", "стоп", "завершить", "0"}:
-        return False
-    return True
 
 
 def _configure_walk_test(
@@ -603,6 +624,17 @@ def _make_walk_progress(total_ports: int):
         print(f"  {bar} {prefix} {msg}")
 
     return progress
+
+
+def _make_stoppable_walk_progress(total_ports: int, watcher: _FinishKeyWatcher):
+    progress = _make_walk_progress(total_ports)
+
+    def wrapped(state: WalkTestState, msg: str) -> None:
+        if watcher.requested():
+            raise _OperatorStopRequested
+        progress(state, msg)
+
+    return wrapped
 
 
 def _print_walk_summary(results: list[PortTestResult]) -> None:
