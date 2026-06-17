@@ -7,7 +7,11 @@ import sys
 import time
 
 from switchlive.app.discovery import run_discovery
-from switchlive.app.port_detection import detect_active_port, take_mac_baseline
+from switchlive.app.port_detection import (
+    detect_active_port,
+    detect_existing_uplink_by_mac_count,
+    take_mac_baseline,
+)
 from switchlive.app.traffic_iperf import (
     IperfConfig,
     check_iperf3_available,
@@ -381,9 +385,9 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
         print(_c(f"  [OK] Аплинк готов: порт {active_link[0].name}", "green"))
         return True
 
-    active = _active_ports_from_mac_table(adapter, session, uplinks)
-    if active:
-        print(_c(f"  [OK] Аплинк готов: порт {active[0].name}", "green"))
+    existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, uplinks)
+    if existing_uplink.port:
+        print(_c(f"  [OK] Аплинк готов: порт {existing_uplink.port.name}", "green"))
         return True
 
     print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
@@ -407,12 +411,6 @@ def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
     ]
 
 
-def _active_ports_from_mac_table(adapter, session, ports: list[PortInfo]) -> list[PortInfo]:
-    entries = adapter.get_mac_table(session)
-    active_indexes = {entry.port_index for entry in entries}
-    return [port for port in ports if port.index in active_indexes]
-
-
 def _active_ports_from_link_status(ports: list[PortInfo]) -> list[PortInfo]:
     return [port for port in ports if port.link_status == LinkStatus.UP]
 
@@ -431,6 +429,10 @@ def _wait_for_uplink(
         active_link = _active_ports_from_link_status(live_uplinks)
         if active_link:
             return active_link[0]
+
+        existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, uplinks)
+        if existing_uplink.port:
+            return existing_uplink.port
 
         detection = detect_active_port(
             adapter,

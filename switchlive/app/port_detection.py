@@ -153,6 +153,51 @@ def detect_active_port(
     )
 
 
+def detect_existing_uplink_by_mac_count(
+    adapter: DeviceAdapter,
+    session: DeviceSession,
+    ports: list[PortInfo],
+    shutdown_ports: set[int] | None = None,
+) -> DetectionResult:
+    """Detect already-connected uplink by existing MAC concentration.
+
+    Uplink is often connected before baseline, so MAC delta is empty. For uplink
+    preflight, existing learned MACs are signal, not noise.
+    """
+    if shutdown_ports is None:
+        shutdown_ports = set()
+
+    port_by_index = {port.index: port for port in ports}
+    counts: dict[int, int] = {}
+    for entry in adapter.get_mac_table(session):
+        if entry.port_index in shutdown_ports or entry.port_index not in port_by_index:
+            continue
+        counts[entry.port_index] = counts.get(entry.port_index, 0) + 1
+
+    if not counts:
+        return DetectionResult(
+            port=None,
+            method="existing_mac_count",
+            confidence="low",
+            warnings=["Нет существующих MAC на uplink-кандидатах"],
+        )
+
+    port_idx, mac_count = max(counts.items(), key=lambda item: item[1])
+    port = port_by_index[port_idx]
+    confidence = "high" if mac_count >= 2 else "medium"
+    log.info(
+        "Existing uplink detected: index=%s name=%s mac_count=%s",
+        port.index,
+        port.cli_name,
+        mac_count,
+    )
+    return DetectionResult(
+        port=port,
+        method="existing_mac_count",
+        confidence=confidence,
+    )
+
+
 def detect_active_port_with_retry(
     adapter: DeviceAdapter,
     session: DeviceSession,

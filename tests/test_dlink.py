@@ -219,6 +219,18 @@ class TestParsers:
         assert entries[0] == (5, "00:1A:2B:3C:4D:5E")
         assert entries[1] == (1, "00:50:BA:12:34:56")
 
+    def test_parse_mac_table_with_vlan_name_columns(self):
+        output = """
+        VID  VLAN Name  MAC Address        Port  Type
+        1    default    00-1A-2B-3C-4D-5E  9     Dynamic
+        1    default    00-50-BA-12-34-56  9     Dynamic
+        """
+        entries = parse_mac_table(output)
+        assert entries == [
+            (9, "00:1A:2B:3C:4D:5E"),
+            (9, "00:50:BA:12:34:56"),
+        ]
+
     def test_parse_counters(self):
         output = """
         CRC Errors: 5

@@ -87,6 +87,7 @@ def parse_mac_table(output: str) -> list[tuple[int, str]]:
     Возвращает [(port_index, mac_address), ...].
     """
     entries = []
+    seen: set[tuple[int, str]] = set()
     for match in re.finditer(
         r"\d+\s+([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})\s+(\d+)",
         output,
@@ -94,7 +95,26 @@ def parse_mac_table(output: str) -> list[tuple[int, str]]:
     ):
         mac = match.group(1).replace("-", ":").upper()
         port = int(match.group(2))
-        entries.append((port, mac))
+        item = (port, mac)
+        if item not in seen:
+            entries.append(item)
+            seen.add(item)
+
+    for line in output.splitlines():
+        mac_match = re.search(
+            r"([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})",
+            line,
+        )
+        if not mac_match:
+            continue
+        port = _extract_port_after_mac(line[mac_match.end():])
+        if port is None:
+            continue
+        mac = mac_match.group(1).replace("-", ":").upper()
+        item = (port, mac)
+        if item not in seen:
+            entries.append(item)
+            seen.add(item)
 
     return entries
 
@@ -201,3 +221,16 @@ def _parse_speed(speed_str: str) -> int:
         return int(speed_str)
     except ValueError:
         return 0
+
+
+def _extract_port_after_mac(text: str) -> int | None:
+    for token in re.split(r"\s+", text.strip()):
+        cleaned = token.strip("[](),")
+        if not cleaned:
+            continue
+        if cleaned.isdigit():
+            return int(cleaned)
+        slash_match = re.search(r"(?:\d+/)*(\d+)$", cleaned)
+        if slash_match:
+            return int(slash_match.group(1))
+    return None

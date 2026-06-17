@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from switchlive.app.port_detection import (
     detect_active_port,
     detect_active_port_with_retry,
+    detect_existing_uplink_by_mac_count,
     take_mac_baseline,
 )
 from switchlive.core.models import MacEntry, PortInfo
@@ -138,6 +139,36 @@ class TestDetectActivePort:
 
         assert result.port is None
         assert len(result.warnings) > 0
+
+
+class TestDetectExistingUplink:
+    def test_detects_port_with_most_existing_macs(self):
+        current = [
+            MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=9),
+            MacEntry(mac="AA:BB:CC:DD:EE:02", port_index=9),
+            MacEntry(mac="AA:BB:CC:DD:EE:03", port_index=9),
+            MacEntry(mac="AA:BB:CC:DD:EE:04", port_index=10),
+        ]
+        ports = [PortInfo(index=9, name="9"), PortInfo(index=10, name="10")]
+        adapter = MagicMock()
+        adapter.get_mac_table.return_value = current
+
+        result = detect_existing_uplink_by_mac_count(adapter, _make_session(), ports)
+
+        assert result.port is not None
+        assert result.port.index == 9
+        assert result.method == "existing_mac_count"
+        assert result.confidence == "high"
+
+    def test_no_existing_macs(self):
+        adapter = MagicMock()
+        adapter.get_mac_table.return_value = []
+
+        result = detect_existing_uplink_by_mac_count(
+            adapter, _make_session(), [PortInfo(index=9, name="9")]
+        )
+
+        assert result.port is None
 
 
 class TestDetectWithRetry:
