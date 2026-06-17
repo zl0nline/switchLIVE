@@ -29,6 +29,9 @@ switchlive = "switchlive.cli:main"
 [tool.setuptools.packages.find]
 include = ["switchlive*"]
 
+[tool.setuptools.package-data]
+switchlive = ["storage/*.sql", "configs/*.txt", "configs/*.json"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

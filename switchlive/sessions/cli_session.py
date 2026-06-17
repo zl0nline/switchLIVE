@@ -103,6 +103,7 @@ class CLISession(DeviceSession):
                 chunk = self._send_and_read(
                     credentials.username.encode() + b"\r",
                     self.prompt_timeout,
+                    delay=0.5,
                 )
             # Шаг 3: password prompt?
             if match_password_current(chunk):
@@ -227,11 +228,11 @@ class CLISession(DeviceSession):
 
     # --- Внутренние методы ---
 
-    def _send_and_read(self, data: bytes, timeout: float) -> str:
+    def _send_and_read(self, data: bytes, timeout: float, delay: float = 0.1) -> str:
         """Отправить байты, прочитать ответ, добавить в transcript, вернуть chunk."""
         log.debug("TX: %s", self._safe_bytes(data))
         self.transport.write(data)
-        time.sleep(0.1)
+        time.sleep(delay)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
         safe_chunk = self._safe_text(chunk)
@@ -239,11 +240,11 @@ class CLISession(DeviceSession):
         log.debug("RX: %s", safe_chunk)
         return chunk
 
-    def _send_secret_and_read(self, secret: str, timeout: float) -> str:
+    def _send_secret_and_read(self, secret: str, timeout: float, delay: float = 0.3) -> str:
         """Отправить пароль (без попадания в логи), прочитать ответ."""
         log.debug("TX: ***")
         self.transport.write(secret.encode() + b"\r")
-        time.sleep(0.3)
+        time.sleep(delay)
         raw = self.transport.read_until_idle(timeout)
         chunk = raw.decode(errors="replace")
         # В transcript пишем маскированную версию
