@@ -394,8 +394,8 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
         print(_c(f"  [OK] Аплинк готов: порт {uplink.name}", "green"))
         return True
 
-    print(_c("  [FAIL] Аплинк не найден. Подключите uplink и повторите тест.", "red"))
-    return False
+    print(_c("  [WARN] Аплинк не удалось определить автоматически.", "yellow"))
+    return _confirm("  Если uplink физически подключен, продолжить тест?", default=True)
 
 
 def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:

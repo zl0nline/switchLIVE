@@ -12,6 +12,7 @@ from switchlive.ui.console import (
     _configure_walk_test,
     _DiscoveryProgressPrinter,
     _format_port_result,
+    _prepare_uplink,
     _print_bottom_menu,
     _progress_bar,
     _run_discovery_wizard,
@@ -164,3 +165,12 @@ class TestUplinkPreflight:
         )
 
         assert result == up
+
+    @patch("switchlive.ui.console._wait_for_uplink", return_value=None)
+    @patch("builtins.input", return_value="")
+    def test_prepare_uplink_can_continue_after_manual_confirmation(self, _input, _wait):
+        uplink = PortInfo(index=9, name="9", type=PortType.COMBO, link_status=LinkStatus.DOWN)
+        adapter = MagicMock()
+        adapter.get_mac_table.return_value = []
+
+        assert _prepare_uplink(adapter, MagicMock(), [uplink], Config()) is True
