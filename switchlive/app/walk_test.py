@@ -79,6 +79,7 @@ class WalkTestConfig:
     # Какие порты пропускать
     skip_management: bool = True
     skip_console: bool = True
+    skip_port_indexes: set[int] = field(default_factory=set)
 
     # Таймауты
     timeout_policy: TimeoutPolicy = field(default_factory=TimeoutPolicy)
@@ -169,6 +170,8 @@ class WalkTestEngine:
             if self.config.skip_management and p.type == PortType.MANAGEMENT:
                 continue
             if self.config.skip_console and p.type == PortType.CONSOLE:
+                continue
+            if p.index in self.config.skip_port_indexes:
                 continue
             filtered.append(p)
         return filtered

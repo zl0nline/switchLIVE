@@ -265,10 +265,12 @@ def _handle_test_menu(config: Config) -> None:
         print("  Тест отменён оператором.")
         return
 
-    if not _prepare_uplink(adapter, session, ports, config):
+    uplink_ready, uplink = _prepare_uplink(adapter, session, ports, config)
+    if not uplink_ready:
         return
 
-    test_config = _configure_walk_test(config)
+    skip_ports = {uplink.index} if uplink else set()
+    test_config = _configure_walk_test(config, skip_port_indexes=skip_ports)
     engine = WalkTestEngine(adapter, session, test_config)
 
     _section("Ход тестирования")
@@ -312,7 +314,10 @@ def _handle_poe_test_menu(config: Config) -> None:
     _print_walk_summary(results)
 
 
-def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
+def _configure_walk_test(
+    config: Config | None = None,
+    skip_port_indexes: set[int] | None = None,
+) -> WalkTestConfig:
     """Collect walk-test settings from operator."""
     config = config or Config()
     print()
@@ -349,6 +354,7 @@ def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
         run_traffic=run_traffic,
         iperf_config=iperf_config,
         run_poe=False,
+        skip_port_indexes=skip_port_indexes or set(),
     )
 
 
@@ -373,33 +379,36 @@ def _configure_poe_test(config: Config | None = None) -> WalkTestConfig:
     )
 
 
-def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> bool:
+def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> tuple[bool, PortInfo | None]:
     """Ensure uplink is visible before asking operator to walk access ports."""
     uplinks = _uplink_candidates(ports)
     if not uplinks:
-        print(_c("  [WARN] В профиле нет выделенных uplink-портов, preflight пропущен.", "yellow"))
-        return True
+        uplinks = ports
 
-    active_link = _active_ports_from_link_status(uplinks)
+    candidates = _dedupe_ports([*uplinks, *ports])
+
+    active_link = _active_ports_from_link_status(candidates)
     if active_link:
         print(_c(f"  [OK] Аплинк готов: порт {active_link[0].name}", "green"))
-        return True
+        return True, active_link[0]
 
-    existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, uplinks)
+    existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, candidates)
     if existing_uplink.port:
         print(_c(f"  [OK] Аплинк готов: порт {existing_uplink.port.name}", "green"))
-        return True
+        return True, existing_uplink.port
 
     print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
-    print("  Подключите uplink в uplink/combo/SFP порт. Ожидаю link up...")
+    print("  Подключите uplink. Ожидаю link up или MAC на активном порту...")
     baseline = take_mac_baseline(adapter, session)
-    uplink = _wait_for_uplink(adapter, session, baseline, uplinks, config)
+    uplink = _wait_for_uplink(adapter, session, baseline, candidates, config)
     if uplink:
         print(_c(f"  [OK] Аплинк готов: порт {uplink.name}", "green"))
-        return True
+        return True, uplink
 
     print(_c("  [WARN] Аплинк не удалось определить автоматически.", "yellow"))
-    return _confirm("  Если uplink физически подключен, продолжить тест?", default=True)
+    if _confirm("  Если uplink физически подключен, продолжить тест?", default=True):
+        return True, None
+    return False, None
 
 
 def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
@@ -409,6 +418,17 @@ def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
         if port.role in ("uplink", "combo")
         or port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO)
     ]
+
+
+def _dedupe_ports(ports: list[PortInfo]) -> list[PortInfo]:
+    result = []
+    seen = set()
+    for port in ports:
+        if port.index in seen:
+            continue
+        result.append(port)
+        seen.add(port.index)
+    return result
 
 
 def _active_ports_from_link_status(ports: list[PortInfo]) -> list[PortInfo]:

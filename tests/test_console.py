@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from switchlive.config import Config
-from switchlive.core.models import LinkStatus, PortInfo, PortType, PortVerdict
+from switchlive.core.models import LinkStatus, MacEntry, PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
     _active_ports_from_link_status,
     _configure_poe_test,
@@ -173,4 +173,26 @@ class TestUplinkPreflight:
         adapter = MagicMock()
         adapter.get_mac_table.return_value = []
 
-        assert _prepare_uplink(adapter, MagicMock(), [uplink], Config()) is True
+        ready, detected = _prepare_uplink(adapter, MagicMock(), [uplink], Config())
+
+        assert ready is True
+        assert detected is None
+
+    def test_prepare_uplink_detects_existing_macs_on_plain_copper(self, capsys):
+        ports = [
+            PortInfo(index=1, name="1", type=PortType.COPPER),
+            PortInfo(index=9, name="9", type=PortType.COPPER),
+        ]
+        adapter = MagicMock()
+        adapter.get_mac_table.return_value = [
+            MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=9),
+            MacEntry(mac="AA:BB:CC:DD:EE:02", port_index=9),
+            MacEntry(mac="AA:BB:CC:DD:EE:03", port_index=9),
+        ]
+
+        ready, detected = _prepare_uplink(adapter, MagicMock(), ports, Config())
+
+        assert ready is True
+        assert detected is not None
+        assert detected.index == 9
+        assert "Аплинк готов: порт 9" in _strip_ansi(capsys.readouterr().out)

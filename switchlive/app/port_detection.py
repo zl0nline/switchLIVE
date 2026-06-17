@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from switchlive.core.models import MacEntry, PortInfo
+from switchlive.core.models import LinkStatus, MacEntry, PortInfo
 from switchlive.devices.base import DeviceAdapter, DeviceSession
 
 log = logging.getLogger(__name__)
@@ -85,6 +85,10 @@ def detect_active_port(
             new_macs.append(entry)
 
     if not new_macs:
+        link_result = detect_active_port_by_link_status(adapter, session, ports, shutdown_ports)
+        if link_result.port is not None:
+            return link_result
+
         log.warning("No new MAC addresses detected after cable connection")
         return DetectionResult(
             port=None,
@@ -151,6 +155,51 @@ def detect_active_port(
         method="mac_delta",
         confidence="high",
     )
+
+
+def detect_active_port_by_link_status(
+    adapter: DeviceAdapter,
+    session: DeviceSession,
+    ports: list[PortInfo],
+    shutdown_ports: set[int] | None = None,
+) -> DetectionResult:
+    """Detect active test port by live link status."""
+    if shutdown_ports is None:
+        shutdown_ports = set()
+
+    port_by_index = {port.index: port for port in ports if port.index not in shutdown_ports}
+    if not port_by_index:
+        return DetectionResult(port=None, method="link_status", confidence="low")
+
+    try:
+        live_ports = adapter.list_ports(session)
+    except Exception as exc:
+        return DetectionResult(
+            port=None,
+            method="link_status",
+            confidence="low",
+            warnings=[f"Не удалось прочитать live status портов: {exc}"],
+        )
+
+    active = [
+        live
+        for live in live_ports
+        if live.index in port_by_index and live.link_status == LinkStatus.UP
+    ]
+    if len(active) == 1:
+        return DetectionResult(
+            port=active[0],
+            method="link_status",
+            confidence="medium",
+        )
+    if len(active) > 1:
+        return DetectionResult(
+            port=None,
+            method="link_status",
+            confidence="low",
+            warnings=[f"Несколько портов link up: {[port.index for port in active]}"],
+        )
+    return DetectionResult(port=None, method="link_status", confidence="low")
 
 
 def detect_existing_uplink_by_mac_count(

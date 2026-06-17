@@ -46,7 +46,7 @@ def parse_show_ports(output: str) -> list[PortInfo]:
 
     Возвращает список PortInfo.
     """
-    ports = []
+    ports_by_index: dict[int, PortInfo] = {}
     for match in re.finditer(
         r"(\d+)\s+(\w+)/(\w+)\s+(\d+[MG]?)\s+(\w+)", output, re.IGNORECASE
     ):
@@ -59,21 +59,58 @@ def parse_show_ports(output: str) -> list[PortInfo]:
         speed_mbps = _parse_speed(speed_str)
         admin_status = AdminStatus.ENABLED if admin_str == "enabled" else AdminStatus.DISABLED
         link_status = LinkStatus.UP if link_str == "up" else LinkStatus.DOWN
-        ports.append(
+        _merge_live_port(
+            ports_by_index,
+            PortInfo(
+                    index=idx,
+                    name=str(idx),
+                    speed_mbps=speed_mbps,
+                    media="copper",
+                    connector="RJ45",
+                    admin_status=admin_status,
+                    link_status=link_status,
+                    actual_speed=speed_mbps if link_status == LinkStatus.UP else 0,
+                    duplex=duplex,
+                )
+        )
+
+    for match in re.finditer(
+        r"^\s*(\d+)(?:\s+\(([CF])\))?\s+"
+        r"(Enabled|Disabled)\s+\S+\s+"
+        r"(Link\s+Down|[\d.]+[MG]/\w+(?:/\w+)?)",
+        output,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        idx = int(match.group(1))
+        medium = (match.group(2) or "C").upper()
+        admin_str = match.group(3).lower()
+        connection = re.sub(r"\s+", " ", match.group(4).strip())
+        admin_status = AdminStatus.ENABLED if admin_str == "enabled" else AdminStatus.DISABLED
+        link_status = LinkStatus.DOWN
+        speed_mbps = 0
+        duplex = ""
+        if connection.lower() != "link down":
+            parts = connection.split("/")
+            speed_mbps = _parse_speed(parts[0])
+            duplex = parts[1] if len(parts) > 1 else ""
+            link_status = LinkStatus.UP
+
+        _merge_live_port(
+            ports_by_index,
             PortInfo(
                 index=idx,
                 name=str(idx),
                 speed_mbps=speed_mbps,
-                media="copper",
-                connector="RJ45",
+                media="sfp" if medium == "F" else "copper",
+                connector="SFP" if medium == "F" else "RJ45",
                 admin_status=admin_status,
                 link_status=link_status,
                 actual_speed=speed_mbps if link_status == LinkStatus.UP else 0,
                 duplex=duplex,
-            )
+            ),
         )
 
-    return ports
+    return list(ports_by_index.values())
 
 
 def parse_mac_table(output: str) -> list[tuple[int, str]]:
@@ -234,3 +271,12 @@ def _extract_port_after_mac(text: str) -> int | None:
         if slash_match:
             return int(slash_match.group(1))
     return None
+
+
+def _merge_live_port(ports_by_index: dict[int, PortInfo], port: PortInfo) -> None:
+    current = ports_by_index.get(port.index)
+    if current is None:
+        ports_by_index[port.index] = port
+        return
+    if current.link_status != LinkStatus.UP and port.link_status == LinkStatus.UP:
+        ports_by_index[port.index] = port

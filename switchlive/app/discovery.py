@@ -198,6 +198,7 @@ def _detect_device(
         try:
             if detector.can_detect(session):
                 progress(f"  Детектор {type(detector).__name__}: совпадение!")
+                _disable_detector_paging(session, detector, progress)
                 identity = detector.identify(session)
                 adapter = _create_adapter(identity)
                 session.vendor = adapter.profile.prompt_vendor
@@ -215,6 +216,15 @@ def _detect_device(
 
     progress(f"  Устройство на {port_name} не распознано (ни один детектор)")
     return None
+
+
+def _disable_detector_paging(
+    session: CLISession,
+    detector: DeviceDetector,
+    progress,
+) -> None:
+    if isinstance(detector, DLinkDetector):
+        _disable_paging(session, DLinkAdapter(), progress)
 
 
 def _try_login(

@@ -208,6 +208,27 @@ class TestParsers:
         assert ports[0].actual_speed == 100
         assert ports[1].link_status == LinkStatus.UP
 
+    def test_parse_show_ports_dgs3000_combo_format(self):
+        output = """
+        Port State/ Settings Connection Address AutoSpeed
+         MDIX Speed/Duplex/FlowCtrl Speed/Duplex/FlowCtrl Learning Downgrade
+        -------- -------- --------------------- --------------------- -------- ---------
+        9 (C) Enabled Auto/Disabled Link Down Enabled Disabled
+         Auto
+        9 (F) Enabled Auto/Disabled Link Down Enabled -
+         Auto
+        10 (C) Enabled Auto/Disabled 100M/Full/None Enabled Disabled
+         Auto
+        10 (F) Enabled Auto/Disabled Link Down Enabled -
+         Auto
+        """
+        ports = {port.index: port for port in parse_show_ports(output)}
+        assert ports[9].link_status == LinkStatus.DOWN
+        assert ports[10].link_status == LinkStatus.UP
+        assert ports[10].actual_speed == 100
+        assert ports[10].duplex == "Full"
+        assert ports[10].media == "copper"
+
     def test_parse_mac_table(self):
         output = """
         VLAN    MAC Address     Port
