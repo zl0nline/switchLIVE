@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from switchlive.core.models import LinkStatus
 from switchlive.devices.dlink.adapter import DLinkAdapter
 from switchlive.devices.dlink.parsers import (
     _parse_speed,
@@ -203,6 +204,9 @@ class TestParsers:
         assert len(ports) >= 2
         assert ports[0].name == "1"
         assert ports[0].speed_mbps == 100
+        assert ports[0].link_status == LinkStatus.UP
+        assert ports[0].actual_speed == 100
+        assert ports[1].link_status == LinkStatus.UP
 
     def test_parse_mac_table(self):
         output = """

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from switchlive.core.models import DeviceIdentity, PortInfo
+from switchlive.core.models import AdminStatus, DeviceIdentity, LinkStatus, PortInfo
 
 
 def parse_show_switch(output: str) -> DeviceIdentity:
@@ -51,12 +51,14 @@ def parse_show_ports(output: str) -> list[PortInfo]:
         r"(\d+)\s+(\w+)/(\w+)\s+(\d+[MG]?)\s+(\w+)", output, re.IGNORECASE
     ):
         idx = int(match.group(1))
-        match.group(2)
-        match.group(3)
+        admin_str = match.group(2).lower()
+        link_str = match.group(3).lower()
         speed_str = match.group(4).upper()
-        match.group(5)
+        duplex = match.group(5)
 
         speed_mbps = _parse_speed(speed_str)
+        admin_status = AdminStatus.ENABLED if admin_str == "enabled" else AdminStatus.DISABLED
+        link_status = LinkStatus.UP if link_str == "up" else LinkStatus.DOWN
         ports.append(
             PortInfo(
                 index=idx,
@@ -64,6 +66,10 @@ def parse_show_ports(output: str) -> list[PortInfo]:
                 speed_mbps=speed_mbps,
                 media="copper",
                 connector="RJ45",
+                admin_status=admin_status,
+                link_status=link_status,
+                actual_speed=speed_mbps if link_status == LinkStatus.UP else 0,
+                duplex=duplex,
             )
         )
 

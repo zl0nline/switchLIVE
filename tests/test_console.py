@@ -5,8 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from switchlive.config import Config
-from switchlive.core.models import PortInfo, PortType, PortVerdict
+from switchlive.core.models import LinkStatus, PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
+    _active_ports_from_link_status,
     _configure_poe_test,
     _configure_walk_test,
     _DiscoveryProgressPrinter,
@@ -15,6 +16,7 @@ from switchlive.ui.console import (
     _progress_bar,
     _run_discovery_wizard,
     _verdict_label,
+    _wait_for_uplink,
     show_start_menu,
 )
 
@@ -136,3 +138,29 @@ class TestConsoleInterrupts:
 
         text = _strip_ansi(capsys.readouterr().out)
         assert "Операция прервана оператором" in text
+
+
+class TestUplinkPreflight:
+    def test_active_ports_from_link_status(self):
+        down = PortInfo(index=9, name="9", link_status=LinkStatus.DOWN)
+        up = PortInfo(index=10, name="10", link_status=LinkStatus.UP)
+
+        assert _active_ports_from_link_status([down, up]) == [up]
+
+    @patch("switchlive.ui.console.time.sleep", return_value=None)
+    def test_wait_for_uplink_detects_link_up_after_connect(self, _sleep):
+        down = PortInfo(index=9, name="9", type=PortType.COMBO, link_status=LinkStatus.DOWN)
+        up = PortInfo(index=9, name="9", type=PortType.COMBO, link_status=LinkStatus.UP)
+        adapter = MagicMock()
+        adapter.list_ports.side_effect = [[down], [up]]
+        adapter.get_mac_table.return_value = []
+
+        result = _wait_for_uplink(
+            adapter,
+            MagicMock(),
+            baseline={},
+            uplinks=[down],
+            config=Config(link_timeout_sec=1),
+        )
+
+        assert result == up

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 
 from switchlive.app.discovery import run_discovery
-from switchlive.app.port_detection import detect_active_port_with_retry, take_mac_baseline
+from switchlive.app.port_detection import detect_active_port, take_mac_baseline
 from switchlive.app.traffic_iperf import (
     IperfConfig,
     check_iperf3_available,
@@ -19,7 +20,7 @@ from switchlive.app.walk_test import (
 )
 from switchlive.config import Config
 from switchlive.core.credentials import Credentials
-from switchlive.core.models import PortInfo, PortType, PortVerdict
+from switchlive.core.models import LinkStatus, PortInfo, PortType, PortVerdict
 from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
 
@@ -375,25 +376,22 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
         print(_c("  [WARN] В профиле нет выделенных uplink-портов, preflight пропущен.", "yellow"))
         return True
 
+    active_link = _active_ports_from_link_status(uplinks)
+    if active_link:
+        print(_c(f"  [OK] Аплинк готов: порт {active_link[0].name}", "green"))
+        return True
+
     active = _active_ports_from_mac_table(adapter, session, uplinks)
     if active:
         print(_c(f"  [OK] Аплинк готов: порт {active[0].name}", "green"))
         return True
 
     print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
-    print("  Подключите uplink в uplink/combo/SFP порт. Ожидаю появления MAC...")
+    print("  Подключите uplink в uplink/combo/SFP порт. Ожидаю link up...")
     baseline = take_mac_baseline(adapter, session)
-    detection = detect_active_port_with_retry(
-        adapter,
-        session,
-        baseline,
-        uplinks,
-        shutdown_ports=set(),
-        max_retries=_detection_retries_for_config(config),
-        retry_delay=2.0,
-    )
-    if detection.port:
-        print(_c(f"  [OK] Аплинк готов: порт {detection.port.name}", "green"))
+    uplink = _wait_for_uplink(adapter, session, baseline, uplinks, config)
+    if uplink:
+        print(_c(f"  [OK] Аплинк готов: порт {uplink.name}", "green"))
         return True
 
     print(_c("  [FAIL] Аплинк не найден. Подключите uplink и повторите тест.", "red"))
@@ -413,6 +411,40 @@ def _active_ports_from_mac_table(adapter, session, ports: list[PortInfo]) -> lis
     entries = adapter.get_mac_table(session)
     active_indexes = {entry.port_index for entry in entries}
     return [port for port in ports if port.index in active_indexes]
+
+
+def _active_ports_from_link_status(ports: list[PortInfo]) -> list[PortInfo]:
+    return [port for port in ports if port.link_status == LinkStatus.UP]
+
+
+def _wait_for_uplink(
+    adapter,
+    session,
+    baseline,
+    uplinks: list[PortInfo],
+    config: Config,
+) -> PortInfo | None:
+    uplink_indexes = {port.index for port in uplinks}
+    for attempt in range(_detection_retries_for_config(config)):
+        live_ports = adapter.list_ports(session)
+        live_uplinks = [port for port in live_ports if port.index in uplink_indexes]
+        active_link = _active_ports_from_link_status(live_uplinks)
+        if active_link:
+            return active_link[0]
+
+        detection = detect_active_port(
+            adapter,
+            session,
+            baseline,
+            uplinks,
+            shutdown_ports=set(),
+        )
+        if detection.port:
+            return detection.port
+
+        if attempt < _detection_retries_for_config(config) - 1:
+            time.sleep(2.0)
+    return None
 
 
 def _detection_retries_for_config(config: Config) -> int:

@@ -13,6 +13,7 @@ from switchlive.devices.dlink.parsers import (
     parse_counters,
     parse_mac_table,
     parse_poe_status,
+    parse_show_ports,
     parse_show_switch,
     parse_transceiver,
 )
@@ -57,7 +58,23 @@ class DLinkAdapter(DeviceAdapter):
         Сначала из профиля (статические данные), при возможности
         уточняет из 'show ports'.
         """
-        return self._profile.ports
+        ports = self._profile.ports
+        try:
+            result = session.run_command(self._profile.show_ports_cmd)
+            live_by_index = {port.index: port for port in parse_show_ports(result.output)}
+        except Exception as e:
+            log.debug("Could not read live port state, using static profile: %s", e)
+            return ports
+
+        for port in ports:
+            live = live_by_index.get(port.index)
+            if not live:
+                continue
+            port.admin_status = live.admin_status
+            port.link_status = live.link_status
+            port.actual_speed = live.actual_speed
+            port.duplex = live.duplex
+        return ports
 
     def get_mac_table(self, session: DeviceSession) -> list[MacEntry]:
         result = session.run_command(self._profile.show_macs_cmd)
