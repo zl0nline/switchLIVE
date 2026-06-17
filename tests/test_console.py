@@ -8,6 +8,7 @@ from switchlive.config import Config
 from switchlive.core.models import PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
     _configure_walk_test,
+    _DiscoveryProgressPrinter,
     _format_port_result,
     _print_bottom_menu,
     _progress_bar,
@@ -46,6 +47,19 @@ class TestConsoleFormatting:
         text = capsys.readouterr().out
         assert "Команды:" in text
         assert "0 выход" in text
+
+    def test_discovery_progress_compacts_port_failures(self, capsys):
+        progress = _DiscoveryProgressPrinter()
+
+        progress("Найдено COM-портов: 2")
+        progress("Проверка порта /dev/ttyUSB0...")
+        progress("Не удалось открыть /dev/ttyUSB0: noisy low-level error")
+        progress.finish()
+
+        text = capsys.readouterr().out
+        assert "1/2" in text
+        assert "/dev/ttyUSB0" in text
+        assert "noisy low-level error" not in text
 
 
 class TestConfigureWalkTest:

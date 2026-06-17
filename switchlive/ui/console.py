@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 
 from switchlive.app.discovery import run_discovery
@@ -60,6 +61,62 @@ def _print_bottom_menu() -> None:
     print()
 
 
+class _DiscoveryProgressPrinter:
+    """Compact operator progress while debug log keeps full discovery details."""
+
+    def __init__(self) -> None:
+        self.total = 0
+        self.checked = 0
+        self.current_port = ""
+        self._line_active = False
+
+    def __call__(self, msg: str) -> None:
+        if self._handle_compact(msg):
+            return
+        self.finish()
+        print(f"  {_c('...', 'cyan')} {msg}")
+
+    def finish(self) -> None:
+        if self._line_active:
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            sys.stdout.flush()
+            self._line_active = False
+
+    def _handle_compact(self, msg: str) -> bool:
+        total_match = re.search(r"Найдено COM-портов:\s*(\d+)", msg)
+        if total_match:
+            self.total = int(total_match.group(1))
+            self._render("поиск serial console")
+            return True
+
+        port_match = re.search(r"Проверка порта\s+(.+)\.\.\.", msg)
+        if port_match:
+            self.checked += 1
+            self.current_port = port_match.group(1)
+            self._render("проверка порта")
+            return True
+
+        quiet_fragments = (
+            "Не удалось открыть",
+            "Нет ответа от консоли",
+            "не распознано",
+            "Зарегистрировано детекторов",
+        )
+        if any(fragment in msg for fragment in quiet_fragments):
+            return True
+
+        return False
+
+    def _render(self, label: str) -> None:
+        total = max(self.total, self.checked, 1)
+        done = min(self.checked, total)
+        bar = _progress_bar(done, total, width=16)
+        port = f" {self.current_port}" if self.current_port else ""
+        sys.stdout.write(f"\r  {bar} {label}{port}"[:100])
+        sys.stdout.flush()
+        self._line_active = True
+
+
 def _manual_credential_prompt(standard_creds: list[Credentials]) -> Credentials | None:
     """Запрос логина/пароля у оператора."""
     print()
@@ -96,14 +153,15 @@ def _run_discovery_wizard(config: Config):
     print()
     _section("Определение коммутатора")
 
-    def progress(msg: str) -> None:
-        print(f"  {_c('...', 'cyan')} {msg}")
-
-    return run_discovery(
-        standard_logins_path=config.standard_login_file,
-        manual_credential_callback=_manual_credential_prompt,
-        progress_callback=progress,
-    )
+    progress = _DiscoveryProgressPrinter()
+    try:
+        return run_discovery(
+            standard_logins_path=config.standard_login_file,
+            manual_credential_callback=_manual_credential_prompt,
+            progress_callback=progress,
+        )
+    finally:
+        progress.finish()
 
 
 def _print_device_summary(result) -> None:
