@@ -17,6 +17,7 @@ from switchlive.devices.eltex.profiles import (
     MODEL_MAP,
     EltexMES2324B,
     EltexMES2324FB,
+    EltexMES3300,
     get_profile_for_model,
 )
 from switchlive.sessions.cli_session import CLISession
@@ -27,6 +28,7 @@ class TestEltexProfiles:
     def test_supported_models_in_map(self):
         assert "MES2324B" in MODEL_MAP
         assert "MES2324FB" in MODEL_MAP
+        assert "MES3300" in MODEL_MAP
 
     def test_mes2324b_ports(self):
         profile = EltexMES2324B()
@@ -49,6 +51,19 @@ class TestEltexProfiles:
         assert isinstance(get_profile_for_model("MES2324B"), EltexMES2324B)
         assert isinstance(get_profile_for_model("MES2324FB AC"), EltexMES2324FB)
         assert get_profile_for_model("MES2308") is None
+
+    def test_get_profile_mes3300(self):
+        profile = get_profile_for_model("MES3300")
+        assert isinstance(profile, EltexMES3300)
+        assert len(profile.ports) == 28
+
+    def test_mes3300_ports(self):
+        profile = EltexMES3300()
+        ports = profile.ports
+        assert len(ports) == 28
+        assert ports[0].connector == "RJ45"
+        assert ports[24].connector == "SFP+"
+        assert ports[24].speed_mbps == 10000
 
     def test_mes_cli_commands(self):
         profile = EltexMES2324B()
@@ -73,6 +88,19 @@ class TestEltexParsers:
     def test_parse_show_version_model_fallback(self):
         identity = parse_show_version("MES2324B software version text")
         assert identity.model == "MES2324B"
+
+    def test_parse_show_version_mes3300_from_firmware(self):
+        """MES3300 определяем по имени прошивки, не только по Device description."""
+        output = """
+Active-image: flash://system/images/mes3300-4020-R3.ros
+  Version: 4.0.20
+  Commit: 796ae783
+console#
+"""
+        identity = parse_show_version(output)
+        assert identity.vendor == "Eltex"
+        assert identity.model == "MES3300"
+        assert identity.firmware == "4.0.20"
 
     def test_parse_mac_table(self):
         output = """

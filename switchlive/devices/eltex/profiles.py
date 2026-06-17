@@ -103,9 +103,48 @@ class EltexMES2324FB(EltexBase):
         ]
 
 
+class EltexMES3300(EltexBase):
+    """MES3300 series — 24x1G RJ45 + 4x10G SFP+.
+
+    Common configurations:
+      MES3300-24T: 24x1G + 4x10G SFP+
+      MES3300-48T: 48x1G + 4x10G SFP+
+    The exact port count may vary; we default to 24+4.
+    """
+
+    model = "MES3300"
+    family = "MES3300"
+
+    @property
+    def ports(self) -> list[PortInfo]:
+        return [
+            PortInfo(
+                index=i,
+                name=str(i),
+                cli_name=f"gigabitethernet 1/0/{i}",
+                speed_mbps=1000,
+                media="copper",
+                connector="RJ45",
+            )
+            for i in range(1, 25)
+        ] + [
+            PortInfo(
+                index=i,
+                name=str(i),
+                cli_name=f"tengigabitethernet 1/0/{i}",
+                speed_mbps=10000,
+                media="sfp_plus",
+                connector="SFP+",
+                role="uplink",
+            )
+            for i in range(25, 29)
+        ]
+
+
 MODEL_MAP: dict[str, type[EltexBase]] = {
     "MES2324B": EltexMES2324B,
     "MES2324FB": EltexMES2324FB,
+    "MES3300": EltexMES3300,
 }
 
 

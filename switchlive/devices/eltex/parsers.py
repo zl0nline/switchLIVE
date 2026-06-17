@@ -108,7 +108,12 @@ def _extract_number(text: str, pattern: str) -> int | float | None:
 
 
 def _extract_model(text: str) -> str | None:
+    # Сначала точные модели из списка
     match = re.search(r"\b(MES2324FB|MES2324B)\b", text, re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    # Модель из имени прошивки: mes3300-4020-R3.ros → MES3300
+    match = re.search(r"\b(mes\d{2,4})", text, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     return None
