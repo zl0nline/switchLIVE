@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from switchlive.config import Config
 from switchlive.core.models import PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
+    _configure_poe_test,
     _configure_walk_test,
     _DiscoveryProgressPrinter,
     _format_port_result,
@@ -77,21 +78,21 @@ class TestConfigureWalkTest:
         cfg = _configure_walk_test()
         assert cfg.run_traffic is False
         assert cfg.iperf_config is None
+        assert cfg.run_poe is False
         assert cfg.poe_camera_ip == ""
 
-    @patch("switchlive.ui.console.check_server_reachable", return_value=True)
     @patch("switchlive.ui.console.check_iperf3_available", return_value=True)
-    @patch("builtins.input", side_effect=["192.0.2.10", "192.0.2.20"])
-    def test_iperf_and_poe_camera(self, _input, _available, _reachable):
+    @patch("builtins.input", return_value="192.0.2.10")
+    def test_iperf_config_without_poe_prompt(self, _input, _available):
         cfg = _configure_walk_test()
         assert cfg.run_traffic is True
         assert cfg.iperf_config.server_host == "192.0.2.10"
-        assert cfg.poe_camera_ip == "192.0.2.20"
+        assert cfg.run_poe is False
+        assert cfg.poe_camera_ip == ""
 
-    @patch("switchlive.ui.console.check_server_reachable", return_value=True)
     @patch("switchlive.ui.console.check_iperf3_available", return_value=True)
-    @patch("builtins.input", side_effect=["", "192.0.2.20"])
-    def test_uses_config_defaults(self, _input, _available, _reachable):
+    @patch("builtins.input", return_value="")
+    def test_uses_config_defaults(self, _input, _available):
         config = Config(
             iperf_server_host="192.0.2.30",
             iperf_server_port=5202,
@@ -114,4 +115,13 @@ class TestConfigureWalkTest:
         assert cfg.timeout_policy.base == 12
         assert cfg.timeout_policy.poe == 34
         assert cfg.timeout_policy.max == 56
+        assert cfg.run_poe is False
+        assert cfg.poe_camera_ip == ""
+
+    @patch("builtins.input", return_value="192.0.2.20")
+    def test_poe_config_is_separate(self, _input):
+        cfg = _configure_poe_test()
+
+        assert cfg.run_traffic is False
+        assert cfg.run_poe is True
         assert cfg.poe_camera_ip == "192.0.2.20"

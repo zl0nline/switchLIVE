@@ -6,10 +6,10 @@ import re
 import sys
 
 from switchlive.app.discovery import run_discovery
+from switchlive.app.port_detection import detect_active_port_with_retry, take_mac_baseline
 from switchlive.app.traffic_iperf import (
     IperfConfig,
     check_iperf3_available,
-    check_server_reachable,
 )
 from switchlive.app.walk_test import (
     PortTestResult,
@@ -19,7 +19,7 @@ from switchlive.app.walk_test import (
 )
 from switchlive.config import Config
 from switchlive.core.credentials import Credentials
-from switchlive.core.models import PortVerdict
+from switchlive.core.models import PortInfo, PortType, PortVerdict
 from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
 
@@ -45,10 +45,11 @@ def _print_menu() -> None:
     print("=" * 50)
     print()
     print("  1. 🔍 Определение коммутатора")
-    print("  2. ▶️  Начать тестирование")
-    print("  3. 📋 История тестов")
-    print("  4. ⚙️  Настройки")
-    print("  5. 🧰 Собрать debug bundle")
+    print("  2. ▶️  Тест портов / traffic")
+    print("  3. ⚡ PoE тест")
+    print("  4. 📋 История тестов")
+    print("  5. ⚙️  Настройки")
+    print("  6. 🧰 Собрать debug bundle")
     print("  0. 🚪 Выход")
     print()
 
@@ -56,7 +57,7 @@ def _print_menu() -> None:
 def _print_bottom_menu() -> None:
     print()
     print("-" * 50)
-    print("  Команды: 1 определить | 2 тест | 3 история | 4 настройки | 5 debug | 0 выход")
+    print("  Команды: 1 определить | 2 порты | 3 PoE | 4 история | 5 настройки | 6 debug | 0 выход")
     print("-" * 50)
     print()
 
@@ -204,12 +205,15 @@ def show_start_menu(
             _handle_test_menu(config)
             _print_bottom_menu()
         elif choice == "3":
-            print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
+            _handle_poe_test_menu(config)
             _print_bottom_menu()
         elif choice == "4":
-            print("\n  ⚠️ Настройки — ещё не реализовано\n")
+            print("\n  ⚠️ Просмотр истории в консоли ещё не реализован\n")
             _print_bottom_menu()
         elif choice == "5":
+            print("\n  ⚠️ Настройки — ещё не реализовано\n")
+            _print_bottom_menu()
+        elif choice == "6":
             _handle_debug_bundle(config, config_path, debug_context)
             _print_bottom_menu()
         else:
@@ -251,6 +255,9 @@ def _handle_test_menu(config: Config) -> None:
         print("  Тест отменён оператором.")
         return
 
+    if not _prepare_uplink(adapter, session, ports, config):
+        return
+
     test_config = _configure_walk_test(config)
     engine = WalkTestEngine(adapter, session, test_config)
 
@@ -263,11 +270,43 @@ def _handle_test_menu(config: Config) -> None:
     _print_walk_summary(results)
 
 
+def _handle_poe_test_menu(config: Config) -> None:
+    """Separate PoE-only wizard."""
+    _section("PoE тестирование")
+    discovery = _run_discovery_wizard(config)
+    if not discovery.found or not discovery.adapter or not discovery.session:
+        print(_c("  [FAIL] Сначала не удалось определить устройство", "red"))
+        return
+
+    _print_device_summary(discovery)
+    adapter = discovery.adapter
+    session = discovery.session
+    poe_ports = [port for port in adapter.list_ports(session) if port.supports_poe]
+    if not poe_ports:
+        print(_c("  [SKIP] В профиле устройства нет PoE-портов", "yellow"))
+        return
+
+    print()
+    print(f"  PoE-портов к проверке: {len(poe_ports)}")
+    if not _confirm("  Запустить PoE тест?", default=True):
+        print("  PoE тест отменён оператором.")
+        return
+
+    test_config = _configure_poe_test(config)
+    engine = WalkTestEngine(adapter, session, test_config)
+    _section("Ход PoE тестирования")
+    results = engine.run(
+        ports=poe_ports,
+        progress_callback=_make_walk_progress(len(poe_ports)),
+    )
+    _print_walk_summary(results)
+
+
 def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
     """Collect walk-test settings from operator."""
     config = config or Config()
     print()
-    print(_c("  Настройка дополнительных тестов", "bold"))
+    print(_c("  Настройка traffic test", "bold"))
 
     iperf_config = None
     run_traffic = False
@@ -278,25 +317,16 @@ def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
             empty_hint="пропустить",
         )
         if server_ip:
-            server_port = config.iperf_server_port
-            print(f"  Проверка {server_ip}:{server_port}...", end=" ")
-            if check_server_reachable(server_ip, server_port):
-                print(_c("[OK]", "green"))
-                run_traffic = True
-                iperf_config = IperfConfig(
-                    server_host=server_ip,
-                    server_port=server_port,
-                    duration_sec=config.iperf_duration,
-                    min_throughput_mbps=config.iperf_min_throughput_mbps,
-                    max_loss_percent=config.iperf_max_loss_percent,
-                )
-            else:
-                print(_c("[WARN]", "yellow"))
-                print("  iperf пропущен: сервер недоступен или iperf3 -s не запущен.")
+            run_traffic = True
+            iperf_config = IperfConfig(
+                server_host=server_ip,
+                server_port=config.iperf_server_port,
+                duration_sec=config.iperf_duration,
+                min_throughput_mbps=config.iperf_min_throughput_mbps,
+                max_loss_percent=config.iperf_max_loss_percent,
+            )
     else:
         print(_c("  [WARN] iperf3 не найден, трафик-тест будет пропущен.", "yellow"))
-
-    poe_camera_ip = input("  IP PoE-камеры (Enter = проверять только питание): ").strip()
 
     return WalkTestConfig(
         timeout_policy=TimeoutPolicy(
@@ -304,10 +334,84 @@ def _configure_walk_test(config: Config | None = None) -> WalkTestConfig:
             poe=config.poe_timeout_sec,
             max=config.max_timeout_sec,
         ),
+        detection_retries=_detection_retries_for_config(config),
+        detection_delay=2.0,
         run_traffic=run_traffic,
         iperf_config=iperf_config,
-        poe_camera_ip=poe_camera_ip,
+        run_poe=False,
     )
+
+
+def _configure_poe_test(config: Config | None = None) -> WalkTestConfig:
+    """Collect PoE-only settings."""
+    config = config or Config()
+    print()
+    print(_c("  Настройка PoE теста", "bold"))
+    poe_camera_ip = input("  IP PoE-камеры (Enter = проверять только питание): ").strip()
+    return WalkTestConfig(
+        timeout_policy=TimeoutPolicy(
+            base=config.link_timeout_sec,
+            poe=config.poe_timeout_sec,
+            max=config.max_timeout_sec,
+        ),
+        detection_retries=_detection_retries_for_config(config),
+        detection_delay=2.0,
+        run_traffic=False,
+        run_poe=True,
+        poe_camera_ip=poe_camera_ip,
+        run_sfp=False,
+    )
+
+
+def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> bool:
+    """Ensure uplink is visible before asking operator to walk access ports."""
+    uplinks = _uplink_candidates(ports)
+    if not uplinks:
+        print(_c("  [WARN] В профиле нет выделенных uplink-портов, preflight пропущен.", "yellow"))
+        return True
+
+    active = _active_ports_from_mac_table(adapter, session, uplinks)
+    if active:
+        print(_c(f"  [OK] Аплинк готов: порт {active[0].name}", "green"))
+        return True
+
+    print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
+    print("  Подключите uplink в uplink/combo/SFP порт. Ожидаю появления MAC...")
+    baseline = take_mac_baseline(adapter, session)
+    detection = detect_active_port_with_retry(
+        adapter,
+        session,
+        baseline,
+        uplinks,
+        shutdown_ports=set(),
+        max_retries=_detection_retries_for_config(config),
+        retry_delay=2.0,
+    )
+    if detection.port:
+        print(_c(f"  [OK] Аплинк готов: порт {detection.port.name}", "green"))
+        return True
+
+    print(_c("  [FAIL] Аплинк не найден. Подключите uplink и повторите тест.", "red"))
+    return False
+
+
+def _uplink_candidates(ports: list[PortInfo]) -> list[PortInfo]:
+    return [
+        port
+        for port in ports
+        if port.role in ("uplink", "combo")
+        or port.type in (PortType.SFP, PortType.SFP_PLUS, PortType.COMBO)
+    ]
+
+
+def _active_ports_from_mac_table(adapter, session, ports: list[PortInfo]) -> list[PortInfo]:
+    entries = adapter.get_mac_table(session)
+    active_indexes = {entry.port_index for entry in entries}
+    return [port for port in ports if port.index in active_indexes]
+
+
+def _detection_retries_for_config(config: Config) -> int:
+    return max(30, int(config.link_timeout_sec / 2))
 
 
 def _input_with_default(prompt: str, default: str, empty_hint: str = "") -> str:

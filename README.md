@@ -69,7 +69,8 @@ switchlive --help
 Интерактивный режим показывает:
 
 - `Определение коммутатора` — serial discovery, login, vendor/model/profile.
-- `Начать тестирование` — discovery, выбор профиля, walk-test.
+- `Тест портов / traffic` — discovery, uplink preflight, walk-test и iperf.
+- `PoE тест` — отдельная проверка PoE-портов, если они есть в профиле.
 - `История тестов` — backend history уже есть, просмотр в console UI ещё не реализован.
 - `Настройки` — пока заглушка.
 - `Собрать debug bundle` — zip для багрепорта.
