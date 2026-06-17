@@ -10,6 +10,7 @@ from switchlive.devices.eltex.detector import EltexDetector
 from switchlive.devices.eltex.parsers import (
     parse_counters,
     parse_mac_table,
+    parse_show_inventory,
     parse_show_version,
     parse_transceiver,
 )
@@ -102,6 +103,34 @@ console#
         assert identity.model == "MES3300"
         assert identity.firmware == "4.0.20"
 
+    def test_parse_show_inventory_real_output(self):
+        """Реальный вывод show inventory с MES2324 AC."""
+        output = '''NAME: "1"   DESCR: "28-port 1G/10G Managed Switch"   
+
+PID: MES2324 AC   VID: 0   SN: ES2A015942   
+
+
+
+console#'''
+        identity = parse_show_inventory(output)
+        assert identity.vendor == "Eltex"
+        assert identity.model == "MES2324"
+        assert identity.serial == "ES2A015942"
+
+    def test_parse_show_inventory_extracts_mes_model(self):
+        """PID может быть 'MES3300-24T AC' — извлекаем MES3300."""
+        output = 'PID: MES3300-24T AC   VID: 0   SN: XX123'
+        identity = parse_show_inventory(output)
+        assert identity.model == "MES3300"
+        assert identity.serial == "XX123"
+
+    def test_parse_show_inventory_missing(self):
+        """Нет PID в выводе — model unknown."""
+        output = 'DESCR: "Some switch"\r\nconsole#'
+        identity = parse_show_inventory(output)
+        assert identity.model == "unknown"
+        assert identity.serial == "unknown"
+
     def test_parse_mac_table(self):
         output = """
         Vlan    Mac Address       Type      Ports
@@ -151,10 +180,15 @@ class TestEltexDetector:
     def test_identify(self):
         transport = MockTransport()
         transport.add_response(b"MES2324FB#")
+        # show inventory (первая попытка)
         transport.add_response(
-            b"Device description: MES2324FB\n"
+            b'NAME: "1"   DESCR: "MES2324FB"   \r\n'
+            b'PID: MES2324FB   VID: 0   SN: ELTX123456   \r\n'
+            b'MES2324FB#'
+        )
+        # show version (enrich firmware)
+        transport.add_response(
             b"SW version: 4.0.16.134\n"
-            b"Serial Number: ELTX123456\n"
             b"MES2324FB#"
         )
         transport.open()
@@ -164,6 +198,8 @@ class TestEltexDetector:
         identity = EltexDetector().identify(session)
         assert identity.vendor == "Eltex"
         assert identity.model == "MES2324FB"
+        assert identity.serial == "ELTX123456"
+        assert identity.firmware == "4.0.16.134"
 
 
 class TestEltexAdapter:

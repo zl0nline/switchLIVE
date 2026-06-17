@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from switchlive.core.models import DeviceCategory, PortInfo
 from switchlive.devices.base import DeviceProfile
 
@@ -149,12 +151,28 @@ MODEL_MAP: dict[str, type[EltexBase]] = {
 
 
 def get_profile_for_model(model_str: str) -> EltexBase | None:
-    """Return an Eltex profile by exact model or MES family prefix."""
+    """Return an Eltex profile by exact model or MES family prefix.
+
+    Matching order:
+    1. Exact match ("MES2324B" -> EltexMES2324B)
+    2. Model starts with a known key ("MES2324FB AC" -> EltexMES2324FB)
+    3. Key starts with model's numeric family ("MES2324" -> EltexMES2324B)
+       Only for exact numeric-family matches, not arbitrary prefixes.
+    """
     normalized = model_str.upper().strip()
     if normalized in MODEL_MAP:
         return MODEL_MAP[normalized]()
 
+    # Model starts with a known key (e.g. "MES2324FB AC" starts with "MES2324FB")
     for key, cls in MODEL_MAP.items():
         if normalized.startswith(key):
             return cls()
+
+    # Try stripping suffix letters from the model (e.g. "MES2324F" -> "MES2324")
+    match = re.match(r"(MES\d{2,4})", normalized)
+    if match:
+        numeric_family = match.group(1)
+        if numeric_family in MODEL_MAP:
+            return MODEL_MAP[numeric_family]()
+
     return None

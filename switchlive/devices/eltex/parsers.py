@@ -32,6 +32,55 @@ def parse_show_version(output: str) -> DeviceIdentity:
     )
 
 
+def parse_show_inventory(output: str) -> DeviceIdentity:
+    """Parse Eltex `show inventory` output.
+
+    Example output:
+        NAME: "1"   DESCR: "28-port 1G/10G Managed Switch"
+        PID: MES2324 AC   VID: 0   SN: ES2A015942
+
+    This is more reliable than show version for model/serial, because
+    firmware images are shared across model families (e.g. mes3300*.ros
+    runs on both MES2324 and MES3300 hardware).
+    """
+    model = _extract_field(output, r"PID:\s*(\S+(?:\s+\S+)*?)\s+VID:")
+    if not model:
+        model = _extract_field(output, r"PID:\s*(.+)")
+    # Normalize: extract full model identifier from PID
+    # PID can be: "MES2324 AC", "MES2324FB", "MES3300-24T"
+    if model:
+        match = re.match(r"(MES\d{2,4}[A-Z]*)", model, re.IGNORECASE)
+        if match:
+            model = match.group(1).upper()
+
+    serial = _extract_field(output, r"SN:\s*(\S+)")
+    if not serial:
+        serial = _extract_field(output, r"Serial\s*(?:Number)?\s*:\s*(.+)")
+
+    return DeviceIdentity(
+        vendor="Eltex",
+        model=model or "unknown",
+        serial=serial or "unknown",
+        firmware="unknown",  # show inventory does not include firmware
+    )
+
+
+def parse_show_system(output: str) -> DeviceIdentity:
+    """Parse Eltex `show system` output as fallback for model."""
+    model = _extract_field(output, r"System Description\s*:\s*(.+)")
+    if model:
+        match = re.search(r"(MES\d{2,4})", model, re.IGNORECASE)
+        if match:
+            model = match.group(1).upper()
+
+    return DeviceIdentity(
+        vendor="Eltex",
+        model=model or "unknown",
+        serial="unknown",
+        firmware="unknown",
+    )
+
+
 def parse_mac_table(output: str) -> list[tuple[int, str]]:
     """Parse MAC address-table output into `(port_index, mac)` tuples."""
     entries = []
@@ -108,12 +157,8 @@ def _extract_number(text: str, pattern: str) -> int | float | None:
 
 
 def _extract_model(text: str) -> str | None:
-    # Сначала точные модели из списка
-    match = re.search(r"\b(MES2324FB|MES2324B)\b", text, re.IGNORECASE)
-    if match:
-        return match.group(1).upper()
-    # Модель из имени прошивки: mes3300-4020-R3.ros → MES3300
-    match = re.search(r"\b(mes\d{2,4})", text, re.IGNORECASE)
+    # Exact known models first (with optional suffix letters)
+    match = re.search(r"\b(MES\d{2,4}[A-Z]*)\b", text, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     return None
