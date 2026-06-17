@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from switchlive.app.discovery import (
     DiscoveryResult,
     _create_adapter,
+    _has_auth_console_output,
     _try_login,
     _try_port,
     run_discovery,
@@ -225,6 +226,16 @@ class TestRunDiscovery:
                 result = run_discovery(progress_callback=messages.append)
         assert result.found is False
         assert any("pyserial" in message for message in messages)
+
+    def test_has_auth_console_output_accepts_eltex_retry(self):
+        assert _has_auth_console_output(
+            "\r\nUser Name:\r\n"
+            "\r\nauthentication failed\r\n"
+            "\r\npress ENTER key to retry authentication\r\n"
+        ) is True
+
+    def test_has_auth_console_output_rejects_garbled_baudrate(self):
+        assert _has_auth_console_output("\x10b��\\BH�\x10\",�\x1c�3�") is False
 
     def test_found_on_first_port(self):
         """Устройство найдено — интеграционный тест через mock transport."""

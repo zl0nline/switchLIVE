@@ -26,6 +26,7 @@ from switchlive.devices.dlink import DLinkAdapter, DLinkDetector  # noqa: F401 �
 from switchlive.devices.eltex import EltexAdapter, EltexDetector  # noqa: F401 — регистрация
 from switchlive.devices.registry import get_all_detectors
 from switchlive.sessions.cli_session import CLISession
+from switchlive.sessions.prompts import contains_auth_retry
 from switchlive.transports.serial import SerialTransport, is_pyserial_available, list_serial_ports
 
 log = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ def _try_baudrate(
     keep_open = False
     try:
         auth_method = _try_login(session, standard_creds, manual_callback, progress)
-        had_console_output = bool(session.transcript.strip())
+        had_console_output = _has_auth_console_output(session.transcript)
         if auth_method is None:
             return None, had_console_output
 
@@ -271,6 +272,27 @@ def _try_login(
 
     progress("  Не удалось войти")
     return None
+
+
+def _has_auth_console_output(text: str) -> bool:
+    """Вернуть True только для читаемого auth/login вывода консоли.
+
+    На неверном baudrate serial может отдавать мусорные байты. Их не нужно
+    считать поводом для ручного логина, иначе оператору первым предлагают
+    заведомо нерабочую скорость.
+    """
+    lowered = text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "login",
+            "user name",
+            "username",
+            "password",
+            "passwd",
+            "authentication failed",
+        )
+    ) or contains_auth_retry(text)
 
 
 def _create_adapter(identity: DeviceIdentity) -> DeviceAdapter:

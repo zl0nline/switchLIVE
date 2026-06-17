@@ -62,6 +62,10 @@ LOGIN_FAILED_PATTERNS = [
     r"(?i)(login\s+invalid|access\s+denied|authenticat|fail|incorrect|bad\s+password)",
 ]
 
+AUTH_RETRY_PATTERNS = [
+    r"(?i)press\s+enter\s+key\s+to\s+retry\s+authentication",
+]
+
 
 def _last_nonempty_line(text: str) -> str:
     """Вернуть последнюю непустую строку после очистки."""
@@ -102,6 +106,11 @@ def find_command_prompt_current(chunk: str, vendor: str = "generic") -> str | No
 def contains_login_failed(transcript: str) -> bool:
     """Ищет признаки неудачного логина по всему transcript."""
     return any(re.search(p, transcript) for p in LOGIN_FAILED_PATTERNS)
+
+
+def contains_auth_retry(chunk: str) -> bool:
+    """Ищет ELTEX-like экран retry после неудачной авторизации."""
+    return any(re.search(p, chunk) for p in AUTH_RETRY_PATTERNS)
 
 
 # --- Совместимость со старыми тестами ---

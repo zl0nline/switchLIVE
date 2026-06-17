@@ -29,6 +29,7 @@ from switchlive.sessions.pager import (
     strip_pager_artifacts,
 )
 from switchlive.sessions.prompts import (
+    contains_auth_retry,
     contains_login_failed,
     find_command_prompt_current,
     match_login_current,
@@ -88,6 +89,9 @@ class CLISession(DeviceSession):
                 log.info("Already at command prompt: %s", prompt)
                 return True
 
+            if contains_auth_retry(chunk):
+                chunk = self._send_and_read(b"\r\n", self.prompt_timeout)
+
             # Шаг 2: login prompt?
             if match_login_current(chunk):
                 chunk = self._send_and_read(
@@ -102,7 +106,7 @@ class CLISession(DeviceSession):
                 )
 
             # Проверить login failed
-            if contains_login_failed(self._transcript):
+            if contains_login_failed(chunk):
                 raise SessionError(
                     f"Авторизация не удалась (пользователь: {credentials.username})"
                 )
@@ -140,7 +144,7 @@ class CLISession(DeviceSession):
                 return True
 
             # Login failed после enable?
-            if contains_login_failed(self._transcript):
+            if contains_login_failed(chunk):
                 raise SessionError(
                     f"Авторизация не удалась (пользователь: {credentials.username})"
                 )

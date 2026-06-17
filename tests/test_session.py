@@ -23,6 +23,7 @@ from switchlive.sessions.pager import (
 )
 from switchlive.sessions.prompts import (
     _last_nonempty_line,
+    contains_auth_retry,
     contains_login_failed,
     find_command_prompt,
     find_command_prompt_current,
@@ -103,6 +104,10 @@ class TestPrompts:
         assert contains_login_failed("Access denied") is True
         assert contains_login_failed("Authentication failed") is True
         assert contains_login_failed("Welcome") is False
+
+    def test_contains_auth_retry(self):
+        assert contains_auth_retry("press ENTER key to retry authentication") is True
+        assert contains_auth_retry("User Name:") is False
 
     def test_find_command_prompt_dlink(self):
         assert find_command_prompt("DES-1228:>", "dlink") == "DES-1228:>"
@@ -193,6 +198,24 @@ class TestCLISession:
         creds = Credentials(username="admin", password="***")
         assert session.login(creds) is True
         assert session.prompt == "switch:>"
+
+    def test_login_eltex_retry_screen_then_credentials(self):
+        """ELTEX can show retry screen before a clean User Name prompt."""
+        t = MockTransport()
+        t.add_response(
+            b"\r\nUser Name:\r\n"
+            b"\r\nauthentication failed\r\n"
+            b"\r\npress ENTER key to retry authentication\r\n"
+        )
+        t.add_response(b"\r\nUser Name:\r\n")
+        t.add_response(b"\r\nPassword:\r\n")
+        t.add_response(b"\r\nMES2324#")
+        t.open()
+
+        session = CLISession(t, vendor="eltex")
+        creds = Credentials(username="admin", password="admin")
+        assert session.login(creds) is True
+        assert session.prompt == "MES2324#"
 
     def test_login_multiline_chunk(self):
         """Многострочный чанк: Login + Password + prompt в одном."""
