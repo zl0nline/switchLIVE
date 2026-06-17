@@ -81,6 +81,49 @@ def parse_show_system(output: str) -> DeviceIdentity:
     )
 
 
+def parse_show_interfaces_status(output: str) -> dict[str, dict]:
+    """Parse Eltex `show interfaces status` output.
+
+    Returns dict keyed by CLI port name (e.g. 'gi1/0/1') with:
+        link_state: 'up' | 'down'
+        speed_mbps: int
+        duplex: str
+
+    Example line:
+        gi1/0/23 1G-Copper    Full    100   Enabled  Off  Up     00,00:02:09
+    """
+    result = {}
+    for line in output.splitlines():
+        # Match port lines: gi1/0/N or te1/0/N
+        match = re.match(
+            r"^\s*((?:gi|te)\d+/\d+/\d+)\s+\S+\s+"
+            r"(\S+)?\s+(\S+)?\s+.*?\b(Up|Down)\b",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        port_name = match.group(1).lower()
+        duplex = match.group(2) or ""
+        speed_str = match.group(3) or ""
+        link_state = match.group(4).lower()
+
+        speed_mbps = 0
+        if speed_str.isdigit():
+            speed_mbps = int(speed_str)
+        elif "1000" in speed_str:
+            speed_mbps = 1000
+        elif "10G" in speed_str or "10000" in speed_str:
+            speed_mbps = 10000
+
+        result[port_name] = {
+            "link_state": link_state,
+            "speed_mbps": speed_mbps,
+            "duplex": duplex,
+        }
+    return result
+
+
 def parse_mac_table(output: str) -> list[tuple[int, str]]:
     """Parse MAC address-table output into `(port_index, mac)` tuples."""
     entries = []

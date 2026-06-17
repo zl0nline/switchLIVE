@@ -11,6 +11,7 @@ from switchlive.devices.eltex.parsers import (
     parse_counters,
     parse_mac_table,
     parse_show_inventory,
+    parse_show_interfaces_status,
     parse_show_version,
     parse_transceiver,
 )
@@ -164,6 +165,25 @@ console#'''
         assert result["rx_power"] == "-3.2"
         assert result["tx_power"] == "-2.1"
         assert result["temperature"] == "36.5"
+
+
+class TestEltexParserInterfacesStatus:
+    def test_parse_interfaces_status_real_output(self):
+        """Реальный вывод show interfaces status с MES2324."""
+        output = """Port     Type         Duplex  Speed Neg      ctrl State         
+gi1/0/1  1G-Copper      --      --     --     --  Down (nc)         
+gi1/0/23 1G-Copper    Full    100   Enabled  Off  Up          00,00:02:09   
+te1/0/1  10G-Fiber      --      --     --     --  Down (nc)         
+"""
+        result = parse_show_interfaces_status(output)
+        assert "gi1/0/1" in result
+        assert result["gi1/0/1"]["link_state"] == "down"
+        assert "gi1/0/23" in result
+        assert result["gi1/0/23"]["link_state"] == "up"
+        assert result["gi1/0/23"]["speed_mbps"] == 100
+        assert result["gi1/0/23"]["duplex"] == "Full"
+        assert "te1/0/1" in result
+        assert result["te1/0/1"]["link_state"] == "down"
 
 
 class TestEltexDetector:
