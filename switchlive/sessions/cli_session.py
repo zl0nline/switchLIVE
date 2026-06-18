@@ -71,6 +71,9 @@ class CLISession(DeviceSession):
         self._prompt: str | None = None
         self._username: str = ""
         self._transcript: str = ""  # полный лог сессии (для диагностики)
+        # Свитч ждёт ввода UserName — следующая попытка login() отправит
+        # username напрямую без \r, чтобы не тратить попытку на lockout-свичах.
+        self._at_login_prompt: bool = False
 
     @property
     def prompt(self) -> str | None:
@@ -84,6 +87,10 @@ class CLISession(DeviceSession):
     def login(self, credentials: Credentials) -> bool:
         """State-machine логин по свежим чанкам вывода.
 
+        Если _at_login_prompt=True, отправляет username напрямую без \r —
+        свитч уже ждёт ввода от предыдущей попытки или от discovery wake-up.
+        Это критично для свитчей с login lockout (DGS-3120: 3 попытки).
+
         Returns True при успехе.
         Raises SessionError при невозможности войти.
         """
@@ -91,38 +98,10 @@ class CLISession(DeviceSession):
         self._transcript = ""
 
         try:
-            # Шаг 0: прочитать буфер без отправки — после reopen порта
-            # свитч может уже ждать ввода UserName (от предыдущей попытки).
-            # Если отправить \r сейчас, он воспримется как пустой username
-            # и потратит попытку на свитчах с lockout (DGS-3120: 3 попытки).
-            stale = self._read_buffered(self.prompt_timeout)
-
-            # Шаг 1: если буфер пуст — «подёргать» Enter (только CR)
-            if stale.strip():
-                chunk = stale
-            else:
-                chunk = self._send_and_read(b"\r", self.prompt_timeout)
-
-            # Уже в командном режиме?
-            prompt = find_command_prompt_current(chunk, self.vendor)
-            if prompt:
-                self._prompt = prompt
-                log.info("Already at command prompt: %s", prompt)
-                return True
-
-            # Auth retry screen? (Eltex: "press ENTER key to retry authentication")
-            # Важно: отправляем только \r, не \r\n — иначе LF воспринимается
-            # как пустой ввод в User Name и цикл auth-failed зацикливается.
-            # Если в чанке уже есть login prompt — не трогаем, переходим к логину.
-            auth_retries = 0
-            while contains_auth_retry(chunk) and not match_login_current(chunk) and auth_retries < 3:
-                chunk = self._send_and_read(b"\r", self.prompt_timeout)
-                auth_retries += 1
-
-            # Шаг 2: login prompt?
-            if match_login_current(chunk):
-                # Если username пустой — не отправлять, чтобы не тратить
-                # попытку логина на устройствах с lockout (D-Link: 3 попытки)
+            if self._at_login_prompt:
+                # Свитч уже ждёт UserName (от discovery wake-up или после Fail!).
+                # Отправляем username напрямую без \r, чтобы не тратить попытку.
+                self._at_login_prompt = False
                 if not credentials.username:
                     raise SessionError("Требуется логин, но учётные данные не предоставлены")
                 chunk = self._send_and_read(
@@ -130,6 +109,42 @@ class CLISession(DeviceSession):
                     self.prompt_timeout,
                     delay=0.5,
                 )
+            else:
+                # Свежее соединение или неизвестное состояние.
+                # Шаг 0: прочитать буфер без отправки.
+                stale = self._read_buffered(self.prompt_timeout)
+
+                # Шаг 1: если буфер пуст — «подёргать» Enter (только CR)
+                if stale.strip():
+                    chunk = stale
+                else:
+                    chunk = self._send_and_read(b"\r", self.prompt_timeout)
+
+                # Уже в командном режиме?
+                prompt = find_command_prompt_current(chunk, self.vendor)
+                if prompt:
+                    self._prompt = prompt
+                    log.info("Already at command prompt: %s", prompt)
+                    return True
+
+                # Auth retry screen? (Eltex: "press ENTER key to retry authentication")
+                auth_retries = 0
+                while contains_auth_retry(chunk) and not match_login_current(chunk) and auth_retries < 3:
+                    chunk = self._send_and_read(b"\r", self.prompt_timeout)
+                    auth_retries += 1
+
+                # Шаг 2: login prompt?
+                if match_login_current(chunk):
+                    if not credentials.username:
+                        raise SessionError("Требуется логин, но учётные данные не предоставлены")
+                    chunk = self._send_and_read(
+                        credentials.username.encode() + b"\r",
+                        self.prompt_timeout,
+                        delay=0.5,
+                    )
+
+            # === Общий путь: после username (или после wake-up) ===
+
             # Шаг 3: password prompt?
             if match_password_current(chunk):
                 chunk = self._send_secret_and_read(
@@ -141,6 +156,9 @@ class CLISession(DeviceSession):
 
             # Проверить login failed
             if contains_login_failed(chunk):
+                # После Fail! свитч возвращается к UserName: — запомним для след. попытки
+                if match_login_current(chunk):
+                    self._at_login_prompt = True
                 raise SessionError(
                     f"Авторизация не удалась (пользователь: {credentials.username})"
                 )
@@ -181,6 +199,8 @@ class CLISession(DeviceSession):
 
             # Login failed после enable?
             if contains_login_failed(chunk):
+                if match_login_current(chunk):
+                    self._at_login_prompt = True
                 raise SessionError(
                     f"Авторизация не удалась (пользователь: {credentials.username})"
                 )
@@ -188,6 +208,9 @@ class CLISession(DeviceSession):
             if match_password_current(chunk):
                 raise SessionError("Не удалось войти — возможно неверный пароль")
 
+            # Неизвестный ответ — проверим, не UserName ли это
+            if match_login_current(chunk):
+                self._at_login_prompt = True
             raise SessionError(
                 f"Не удалось определить промпт после логина. "
                 f"Последний вывод: {self._safe_text(chunk)[:200]}"
@@ -292,15 +315,11 @@ class CLISession(DeviceSession):
         """Сбросить состояние сессии для повторной попытки логина.
 
         Очищает промпт и транскрипт, но не закрывает транспорт.
-        Сбрасывает input buffer транспорта чтобы мусор от предыдущей
-        попытки не попал в следующую.
+        НЕ сбрасывает input buffer транспорта — свитч может уже ждать ввода
+        UserName, и флаг _at_login_prompt должен сохранить состояние.
         """
         self._prompt = None
         self._transcript = ""
-        try:
-            self.transport.reset_input_buffer()
-        except Exception:
-            log.debug("Transport reset_input_buffer not available or failed")
 
     # --- Внутренние методы ---
 

@@ -126,19 +126,15 @@ class TestTryLogin:
         assert result == "none"
 
     def test_login_standard(self):
-        # _try_login с standard_creds пропускает пустой логин,
-        # сразу пробует standard creds.
+        # _try_login с standard_creds:
+        # 1. else-branch: _read_buffered -> empty -> send \r -> switch shows Login:
+        # 2. match_login_current -> True -> session._at_login_prompt = True
+        # 3. login(admin): _at_login_prompt -> send admin directly -> Password: -> pass -> prompt
         transport = MockTransport()
-        # _read_buffered в else-ветке _try_login (не prompt)
-        transport.add_response(b"")
-        # _send_and_read после пустого буфера — будим консоль
-        transport.add_response(b"Login: ")
-        # login(admin/admin): _read_buffered пусто → отправляем \r → но Login уже в буфере
-        # На самом деле: transport.close/open/reset в _try_login, потом login()
-        # Нужны responses для login(admin): пробуждение, username, password, prompt
-        transport.add_response(b"Login: ")
-        transport.add_response(b"Password: ")
-        transport.add_response(b"switch:>")
+        transport.add_response(b"")  # _read_buffered in else-branch
+        transport.add_response(b"Login: ")  # _send_and_read(b"\r") in else-branch
+        transport.add_response(b"Password: ")  # login sends admin directly
+        transport.add_response(b"switch:>")  # login sends password
         transport.open()
 
         session = CLISession(transport, vendor="dlink")
@@ -149,6 +145,7 @@ class TestTryLogin:
 
         result = _try_login(session, creds, None, progress)
         assert result is not None
+        assert result == "standard"
 
     def test_login_manual(self):
         transport = MockTransport()
@@ -196,9 +193,12 @@ class TestTryLogin:
     def test_login_lockout_is_reported(self):
         """CLI lockout must stop retries and be visible to the operator."""
         transport = MockTransport()
-        transport.add_response(b"UserName:")
-        transport.add_response(b"UserName:")
-        transport.add_response(b"PassWord:")
+        # else-branch: _read_buffered -> empty, _send_and_read(\r) -> UserName:
+        transport.add_response(b"")
+        transport.add_response(b"UserName:")  # wake -> login prompt
+        # _at_login_prompt=True, login(admin): send admin directly
+        transport.add_response(b"PassWord:")  # admin -> PassWord:
+        # send password -> lockout
         transport.add_response(
             b"Fail!\n\nBlocked unauthorized CLI access!\n"
             b"Maximum number of login attempts reached. Lock out for 60 seconds.\n"

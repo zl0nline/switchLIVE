@@ -289,8 +289,9 @@ def _try_login(
     Важно: некоторые коммутаторы (D-Link DGS-3120 и др.) дают всего 2-3
     попытки входа перед локаутом на 60 сек. Поэтому:
     - Пустой логин (без авторизации) пробуется только если нет standard_creds.
-    - После неудачной попытки порт закрывается/открывается, буфер очищается,
-      и при reopen мы НЕ отправляем \r сразу — login() сделает это сам.
+    - После неудачной попытки НЕ переоткрываем порт и НЕ сбрасываем буфер:
+      свитч продолжает ждать ввода UserName, и флаг _at_login_prompt
+      на сессии говорит login() отправить username напрямую без \r.
     """
     # 1. Без авторизации — только если нет стандартных логинов.
     #    Иначе пустой логин тратит попытку на свитчах с lockout (DGS-3120: 3 попытки).
@@ -309,46 +310,26 @@ def _try_login(
             return None
     else:
         # Есть стандартные логины — проверяем, не в командном ли мы уже режиме.
-        # Важно: используем _read_buffered (без отправки \r), чтобы не тратить
-        # попытку входа на свитчах с lockout.
-        try:
-            from switchlive.sessions.prompts import find_command_prompt_current
+        from switchlive.sessions.prompts import find_command_prompt_current, match_login_current
 
-            chunk = session._read_buffered(session.prompt_timeout)
-            if not chunk.strip():
-                # Буфер пуст — консоль нужно «подбудить» Enter
-                chunk = session._send_and_read(b"\r", session.prompt_timeout)
-            prompt = find_command_prompt_current(chunk, "discovery")
-            if prompt:
-                session._prompt = prompt
-                progress("  Логин не требуется (уже в командном режиме)")
-                return "none"
-        except Exception:
-            pass
-
-    if not session.transcript.strip() and not standard_creds:
-        progress("  Нет ответа от консоли на этом baudrate")
-        return None
+        chunk = session._read_buffered(session.prompt_timeout)
+        if not chunk.strip():
+            # Буфер пуст — консоль нужно «подбудить» Enter
+            chunk = session._send_and_read(b"\r", session.prompt_timeout)
+        prompt = find_command_prompt_current(chunk, "discovery")
+        if prompt:
+            session._prompt = prompt
+            progress("  Логин не требуется (уже в командном режиме)")
+            return "none"
+        # Если в выводе есть login prompt — запомним для login()
+        if match_login_current(chunk):
+            session._at_login_prompt = True
 
     # 2. Стандартные логины
     for cred in standard_creds:
-        # Пересоздаём сессию для каждой попытки — предыдущий login
-        # мог оставить switch в состоянии auth-fail / lockout.
-        # Закрываем и открываем порт заново.
-        session.reset()
-        try:
-            session.transport.close()
-            session.transport.open()
-            time.sleep(0.5)
-            # Очистить буфер: свитч может ждать ввода UserName после
-            # предыдущей неудачи, и наш \r из login() воспримется
-            # как пустой username, сдвигая state machine.
-            try:
-                session.transport.reset_input_buffer()
-            except Exception:
-                pass
-        except Exception:
-            pass
+        # НЕ переоткрываем порт и НЕ сбрасываем input buffer между попытками.
+        # После неудачи свитч возвращается к UserName: и ждёт ввода.
+        # Флаг _at_login_prompt говорит login() отправить username напрямую.
         try:
             if session.login(cred):
                 progress(f"  Вошли через стандартный логин: {cred.username}")
@@ -360,13 +341,6 @@ def _try_login(
 
     # 3. Ручной ввод
     if manual_callback:
-        session.reset()
-        try:
-            session.transport.close()
-            session.transport.open()
-            time.sleep(0.5)
-        except Exception:
-            pass
         cred = manual_callback(standard_creds)
         if cred:
             try:
