@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from switchlive.core.credentials import Credentials
-from switchlive.core.errors import SessionError
+from switchlive.core.errors import AuthLockoutError, SessionError
 from switchlive.sessions.cli_session import CLISession
 from switchlive.sessions.pager import (
     detect_pager,
@@ -23,6 +23,7 @@ from switchlive.sessions.pager import (
 )
 from switchlive.sessions.prompts import (
     _last_nonempty_line,
+    contains_auth_lockout,
     contains_auth_retry,
     contains_login_failed,
     find_command_prompt,
@@ -31,6 +32,7 @@ from switchlive.sessions.prompts import (
     match_login_prompt,
     match_password_current,
     match_password_prompt,
+    parse_auth_lockout_seconds,
 )
 from tests.test_transport import MockTransport
 
@@ -108,6 +110,15 @@ class TestPrompts:
     def test_contains_auth_retry(self):
         assert contains_auth_retry("press ENTER key to retry authentication") is True
         assert contains_auth_retry("User Name:") is False
+
+    def test_contains_auth_lockout(self):
+        text = (
+            "Blocked unauthorized CLI access!\n"
+            "Maximum number of login attempts reached. Lock out for 60 seconds."
+        )
+        assert contains_auth_lockout(text) is True
+        assert parse_auth_lockout_seconds(text) == 60
+        assert contains_auth_lockout("UserName:") is False
 
     def test_find_command_prompt_dlink(self):
         assert find_command_prompt("DES-1228:>", "dlink") == "DES-1228:>"
@@ -326,6 +337,25 @@ class TestCLISession:
         creds = Credentials(username="admin", password="***")
         with pytest.raises(SessionError, match="Авторизация не удалась"):
             session.login(creds)
+
+    def test_login_auth_lockout(self):
+        """D-Link lockout after failed attempts must be a distinct error."""
+        t = MockTransport()
+        t.add_response(b"UserName:")
+        t.add_response(b"PassWord:")
+        t.add_response(
+            b"Fail!\n\nBlocked unauthorized CLI access!\n"
+            b"Maximum number of login attempts reached. Lock out for 60 seconds.\n"
+        )
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        creds = Credentials(username="admin", password="wrong")
+        with pytest.raises(AuthLockoutError) as exc_info:
+            session.login(creds)
+
+        assert exc_info.value.retry_after_seconds == 60
+        assert "Подождите 60 секунд" in str(exc_info.value)
 
     def test_login_enable_password(self):
         """Требуется enable password (отдельные чанки)."""

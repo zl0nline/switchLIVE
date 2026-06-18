@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass
 
 from switchlive.core.credentials import Credentials, load_standard_logins
-from switchlive.core.errors import SessionError, TransportError
+from switchlive.core.errors import AuthLockoutError, SessionError, TransportError
 from switchlive.core.models import DeviceIdentity
 from switchlive.devices.base import DeviceAdapter, DeviceDetector
 from switchlive.devices.dlink import DLinkAdapter, DLinkDetector  # noqa: F401 — регистрация
@@ -124,7 +124,7 @@ def run_discovery(
             if had_output:
                 any_console_output = True
 
-            if result and result.found:
+            if result:
                 return result
 
         if any_console_output:
@@ -217,7 +217,11 @@ def _try_baudrate(
     session = CLISession(transport, vendor="discovery")
     keep_open = False
     try:
-        auth_method = _try_login(session, standard_creds, manual_callback, progress)
+        try:
+            auth_method = _try_login(session, standard_creds, manual_callback, progress)
+        except AuthLockoutError as e:
+            progress(f"  Блокировка авторизации: {e}")
+            return DiscoveryResult(found=False, error=str(e)), True
         had_console_output = _has_auth_console_output(session.transcript)
         if auth_method is None:
             return None, had_console_output
@@ -287,6 +291,8 @@ def _try_login(
         if session.login(Credentials()):
             progress("  Логин не требуется")
             return "none"
+    except AuthLockoutError:
+        raise
     except SessionError:
         pass
 
@@ -310,6 +316,8 @@ def _try_login(
             if session.login(cred):
                 progress(f"  Вошли через стандартный логин: {cred.username}")
                 return "standard"
+        except AuthLockoutError:
+            raise
         except SessionError:
             continue
 
@@ -328,6 +336,8 @@ def _try_login(
                 if session.login(cred):
                     progress(f"  Вошли через ручной ввод: {cred.username}")
                     return "manual"
+            except AuthLockoutError:
+                raise
             except SessionError as e:
                 progress(f"  Ручной логин не удался: {e}")
 
@@ -352,6 +362,10 @@ def _has_auth_console_output(text: str) -> bool:
             "password",
             "passwd",
             "authentication failed",
+            "blocked unauthorized cli access",
+            "maximum number of login attempts",
+            "lock out for",
+            "locked out for",
         )
     ) or contains_auth_retry(text)
 

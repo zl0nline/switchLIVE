@@ -20,7 +20,7 @@ import re
 import time
 
 from switchlive.core.credentials import Credentials
-from switchlive.core.errors import SessionError
+from switchlive.core.errors import AuthLockoutError, SessionError
 from switchlive.core.models import CommandResult
 from switchlive.diagnostics import redact_text
 from switchlive.sessions.base import DeviceSession
@@ -35,6 +35,7 @@ from switchlive.sessions.prompts import (
     find_command_prompt_current,
     match_login_current,
     match_password_current,
+    parse_auth_lockout_seconds,
 )
 from switchlive.transports.base import CommandTransport
 
@@ -127,6 +128,8 @@ class CLISession(DeviceSession):
                     self.prompt_timeout,
                 )
 
+            self._raise_if_auth_lockout(chunk)
+
             # Проверить login failed
             if contains_login_failed(chunk):
                 raise SessionError(
@@ -165,6 +168,8 @@ class CLISession(DeviceSession):
                 )
                 return True
 
+            self._raise_if_auth_lockout(chunk)
+
             # Login failed после enable?
             if contains_login_failed(chunk):
                 raise SessionError(
@@ -183,6 +188,16 @@ class CLISession(DeviceSession):
             raise
         except Exception as e:
             raise SessionError(f"Ошибка при логине: {e}") from e
+
+    def _raise_if_auth_lockout(self, chunk: str) -> None:
+        retry_after = parse_auth_lockout_seconds(chunk)
+        if retry_after is None:
+            return
+        raise AuthLockoutError(
+            "Консоль временно заблокировала вход после нескольких неверных "
+            f"попыток. Подождите {retry_after} секунд и повторите.",
+            retry_after_seconds=retry_after,
+        )
 
     def run_command(
         self, command: str, timeout: float | None = None

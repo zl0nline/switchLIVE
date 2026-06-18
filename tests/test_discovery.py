@@ -8,6 +8,7 @@ from switchlive.app.discovery import (
     DiscoveryResult,
     _create_adapter,
     _has_auth_console_output,
+    _try_baudrate,
     _try_login,
     _try_port,
     run_discovery,
@@ -199,6 +200,36 @@ class TestTryLogin:
             return None
         result = _try_login(session, [], None, progress)
         assert result is None
+
+    def test_login_lockout_is_reported(self):
+        """CLI lockout must stop retries and be visible to the operator."""
+        transport = MockTransport()
+        transport.add_response(b"UserName:")
+        transport.add_response(b"UserName:")
+        transport.add_response(b"PassWord:")
+        transport.add_response(
+            b"Fail!\n\nBlocked unauthorized CLI access!\n"
+            b"Maximum number of login attempts reached. Lock out for 60 seconds.\n"
+        )
+        transport.open()
+
+        messages = []
+
+        with patch("switchlive.app.discovery.SerialTransport", return_value=transport):
+            result, had_output = _try_baudrate(
+                "/dev/ttyUSB0",
+                115200,
+                [Credentials(username="admin", password="admin")],
+                manual_callback=None,
+                detectors=[],
+                progress=messages.append,
+            )
+
+        assert had_output is True
+        assert result is not None
+        assert result.found is False
+        assert "Подождите 60 секунд" in result.error
+        assert any("Блокировка авторизации" in msg for msg in messages)
 
 
 class TestRunDiscovery:

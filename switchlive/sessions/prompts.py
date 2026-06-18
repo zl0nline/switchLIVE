@@ -78,6 +78,13 @@ AUTH_RETRY_PATTERNS = [
     r"(?i)press\s+enter\s+key\s+to\s+retry\s+authentication",
 ]
 
+AUTH_LOCKOUT_PATTERNS = [
+    r"(?i)blocked\s+unauthorized\s+cli\s+access",
+    r"(?i)maximum\s+number\s+of\s+login\s+attempts\s+reached",
+    r"(?i)lock\s*out\s+for\s+(\d+)\s+seconds?",
+    r"(?i)locked\s+out\s+for\s+(\d+)\s+seconds?",
+]
+
 
 def _last_nonempty_line(text: str) -> str:
     """Вернуть последнюю непустую строку после очистки."""
@@ -123,6 +130,22 @@ def contains_login_failed(transcript: str) -> bool:
 def contains_auth_retry(chunk: str) -> bool:
     """Ищет ELTEX-like экран retry после неудачной авторизации."""
     return any(re.search(p, chunk) for p in AUTH_RETRY_PATTERNS)
+
+
+def parse_auth_lockout_seconds(text: str) -> int | None:
+    """Вернуть длительность auth-lockout, если устройство её сообщило."""
+    for pattern in AUTH_LOCKOUT_PATTERNS:
+        match = re.search(pattern, text)
+        if match and match.lastindex:
+            return int(match.group(1))
+    if any(re.search(pattern, text) for pattern in AUTH_LOCKOUT_PATTERNS):
+        return 60
+    return None
+
+
+def contains_auth_lockout(text: str) -> bool:
+    """Ищет блокировку CLI после превышения числа попыток входа."""
+    return parse_auth_lockout_seconds(text) is not None
 
 
 # --- Совместимость со старыми тестами ---
