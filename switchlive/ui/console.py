@@ -765,12 +765,12 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
 
     active_link = _active_ports_from_link_status(candidates)
     if active_link:
-        print(_c(f"  [OK] Аплинк готов: порт {active_link[0].name}", "green"))
+        print(_c(f"  [OK] Аплинк готов: {_format_port_link(active_link[0])}", "green"))
         return True, active_link[0]
 
     existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, candidates)
     if existing_uplink.port:
-        print(_c(f"  [OK] Аплинк готов: порт {existing_uplink.port.name}", "green"))
+        print(_c(f"  [OK] Аплинк готов: {_format_port_link(existing_uplink.port)}", "green"))
         return True, existing_uplink.port
 
     print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
@@ -778,7 +778,7 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
     baseline = take_mac_baseline(adapter, session)
     uplink = _wait_for_uplink(adapter, session, baseline, candidates, config)
     if uplink:
-        print(_c(f"  [OK] Аплинк готов: порт {uplink.name}", "green"))
+        print(_c(f"  [OK] Аплинк готов: {_format_port_link(uplink)}", "green"))
         return True, uplink
 
     print(_c("  [WARN] Аплинк не удалось определить автоматически.", "yellow"))
@@ -809,6 +809,12 @@ def _dedupe_ports(ports: list[PortInfo]) -> list[PortInfo]:
 
 def _active_ports_from_link_status(ports: list[PortInfo]) -> list[PortInfo]:
     return [port for port in ports if port.link_status == LinkStatus.UP]
+
+
+def _format_port_link(port: PortInfo) -> str:
+    speed = f", {port.actual_speed}M" if port.actual_speed else ""
+    duplex = f"/{port.duplex}" if port.duplex else ""
+    return f"порт {port.name}{speed}{duplex}"
 
 
 def _wait_for_uplink(

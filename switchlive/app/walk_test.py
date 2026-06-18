@@ -349,6 +349,13 @@ class WalkTestEngine:
                     result.notes.append(
                         f"iperf PASS: {iperf_result.throughput_mbps} Mbps"
                     )
+                    if _looks_like_100m_path_bottleneck(port, iperf_result.throughput_mbps):
+                        result.notes.append(
+                            "iperf bottleneck hint: tested port link is 1G+, "
+                            "but throughput is ~100M; check uplink/server path"
+                        )
+                        if result.verdict == PortVerdict.PASS:
+                            result.verdict = PortVerdict.WARN
 
                 _progress(
                     WalkTestState.TEST_TRAFFIC,
@@ -442,3 +449,7 @@ class WalkTestEngine:
                 WalkTestState.SHUTDOWN,
                 f"⚠️ Не удалось shutdown порт {port.name}: {e}",
             )
+
+
+def _looks_like_100m_path_bottleneck(port: PortInfo, throughput_mbps: float) -> bool:
+    return port.actual_speed >= 1000 and 80 <= throughput_mbps <= 120

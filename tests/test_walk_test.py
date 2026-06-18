@@ -323,3 +323,36 @@ class TestWalkTestEngine:
 
         assert result.traffic_passed is True
         adapter.shutdown_port.assert_called_once()
+
+    def test_gigabit_port_with_94m_iperf_gets_bottleneck_hint(self):
+        """1G link with ~100M iperf means bottleneck is probably elsewhere."""
+        from switchlive.app.traffic_iperf import IperfConfig, IperfResult
+        from switchlive.core.models import MacEntry
+
+        port = PortInfo(index=27, name="27", type=PortType.COMBO, actual_speed=1000)
+        mac_seq = [
+            [],
+            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=27)],
+        ]
+        adapter = _make_mock_adapter(
+            ports=[port],
+            mac_table_sequence=mac_seq,
+            counters={},
+        )
+        session = MagicMock()
+        config = WalkTestConfig(
+            run_traffic=True,
+            iperf_config=IperfConfig(server_host="192.0.2.10"),
+            detection_retries=1,
+            detection_delay=0,
+            run_sfp=False,
+        )
+
+        with patch(
+            "switchlive.app.traffic_iperf.run_iperf_test",
+            return_value=IperfResult(success=True, throughput_mbps=94.0, verdict="PASS"),
+        ):
+            result = WalkTestEngine(adapter, session, config)._test_port(port, lambda s, m: None)
+
+        assert result.verdict == PortVerdict.WARN
+        assert any("bottleneck" in note for note in result.notes)
