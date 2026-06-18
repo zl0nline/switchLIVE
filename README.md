@@ -79,6 +79,15 @@ switchlive console-probe --output-dir logs/console-probe
 показывает `READABLE`, `GARBLED` или `SILENT`. Это полезно, когда непонятно,
 на какой скорости коммутатор отдаёт консоль.
 
+Обновить рабочую копию и переустановить CLI через `pipx`:
+
+```bash
+switchlive update
+```
+
+Команда должна запускаться из checkout `switchLIVE` или его подпапки. Она
+выполняет `git pull`, затем `pipx install --force .`.
+
 ## Меню
 
 Интерактивный режим показывает:

@@ -1,7 +1,9 @@
 """Точка входа CLI."""
 
 import argparse
+import subprocess
 import sys
+from pathlib import Path
 
 from switchlive.app.console_probe import (
     baudrates_from_config,
@@ -18,6 +20,9 @@ from switchlive.ui.console import show_start_menu
 def main(argv: list[str] | None = None) -> int:
     """Запуск главного меню."""
     args = _parse_args(argv)
+    if args.command == "update":
+        return run_update()
+
     config = Config.load(args.config)
     if args.debug:
         config.debug = True
@@ -51,6 +56,34 @@ def main(argv: list[str] | None = None) -> int:
 
     show_start_menu(config=config, config_path=args.config, debug_context=context)
     return 0
+
+
+def run_update(start: Path | None = None) -> int:
+    """Update switchLIVE from its git checkout and reinstall through pipx."""
+    root = _find_project_root(start or Path.cwd())
+    if root is None:
+        print("switchLIVE checkout not found. Run this command from the switchLIVE repo directory.")
+        return 2
+
+    for command in (["git", "pull"], ["pipx", "install", "--force", "."]):
+        print(f"$ {' '.join(command)}")
+        completed = subprocess.run(command, cwd=root, check=False)
+        if completed.returncode != 0:
+            return completed.returncode
+    return 0
+
+
+def _find_project_root(start: Path) -> Path | None:
+    """Find local switchLIVE git checkout from current directory upward."""
+    current = start.resolve()
+    candidates = (current, *current.parents)
+    for path in candidates:
+        if not (path / ".git").exists():
+            continue
+        pyproject = path / "pyproject.toml"
+        if pyproject.exists() and 'name = "switchlive"' in pyproject.read_text(encoding="utf-8"):
+            return path
+    return None
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -99,6 +132,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     probe.add_argument(
         "--output-dir",
         help="write non-empty console samples to this directory",
+    )
+    subparsers.add_parser(
+        "update",
+        help="run git pull and reinstall switchLIVE with pipx",
     )
     return parser.parse_args(argv)
 
