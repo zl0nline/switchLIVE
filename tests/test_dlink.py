@@ -228,6 +228,28 @@ class TestParsers:
         assert is_default is True
         assert reasons == []
 
+    def test_parse_show_switch_default_state_does_not_shift_empty_fields(self):
+        output = """
+        IP Address : 10.90.90.90 (Manual)
+        VLAN Name : default
+        System Name :
+        System Location :
+        System Uptime : 0 days, 0 hours, 1 minutes, 33 seconds
+        System Contact :
+        Spanning Tree : Disabled
+        GVRP : Disabled
+        IGMP Snooping : Disabled
+        VLAN Trunk : Disabled
+        802.1X : Disabled
+        """
+
+        is_default, reasons, evidence = parse_show_switch_default_state(output)
+
+        assert is_default is True
+        assert reasons == []
+        assert "system_location" not in evidence
+        assert "system_contact" not in evidence
+
     def test_parse_show_ports(self):
         output = """
         Port   State/Link  Speed   Duplex

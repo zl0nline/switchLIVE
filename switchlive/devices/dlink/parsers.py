@@ -40,15 +40,15 @@ def parse_show_switch_default_state(output: str) -> tuple[bool, list[str], dict[
     evidence = {
         key: value
         for key, value in {
-            "ip_address": _extract_field(output, r"IP\s*Address\s*:\s*(.+)"),
-            "vlan_name": _extract_field(output, r"VLAN\s*Name\s*:\s*(.+)"),
-            "system_name": _extract_field(output, r"System\s*Name\s*:\s*(.+)"),
-            "system_location": _extract_field(output, r"System\s*Location\s*:\s*(.+)"),
-            "system_contact": _extract_field(output, r"System\s*Contact\s*:\s*(.+)"),
-            "gvrp": _extract_field(output, r"GVRP\s*:\s*(.+)"),
-            "igmp_snooping": _extract_field(output, r"IGMP\s*Snooping\s*:\s*(.+)"),
-            "vlan_trunk": _extract_field(output, r"VLAN\s*Trunk\s*:\s*(.+)"),
-            "dot1x": _extract_field(output, r"802\.1X\s*:\s*(.+)"),
+            "ip_address": _extract_line_field(output, r"IP\s*Address"),
+            "vlan_name": _extract_line_field(output, r"VLAN\s*Name"),
+            "system_name": _extract_line_field(output, r"System\s*Name"),
+            "system_location": _extract_line_field(output, r"System\s*Location"),
+            "system_contact": _extract_line_field(output, r"System\s*Contact"),
+            "gvrp": _extract_line_field(output, r"GVRP"),
+            "igmp_snooping": _extract_line_field(output, r"IGMP\s*Snooping"),
+            "vlan_trunk": _extract_line_field(output, r"VLAN\s*Trunk"),
+            "dot1x": _extract_line_field(output, r"802\.1X"),
         }.items()
         if value
     }
@@ -277,6 +277,17 @@ def parse_transceiver(output: str) -> dict[str, str]:
 
 def _extract_field(text: str, pattern: str) -> str | None:
     match = re.search(pattern, text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def _extract_line_field(text: str, label_pattern: str) -> str | None:
+    match = re.search(
+        rf"^\s*{label_pattern}\s*:[ \t]*(.*?)\s*$",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    )
     if match:
         return match.group(1).strip()
     return None
