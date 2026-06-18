@@ -348,12 +348,12 @@ class TestDLinkAdapter:
         assert session.run_command_confirming.call_count == 2
         session.run_command_confirming.assert_any_call(
             "reset config",
-            confirmations=("y", "yes"),
+            confirmations=("y",),
             timeout=20.0,
         )
         session.run_command_confirming.assert_any_call(
             "reboot",
-            confirmations=("y", "yes"),
+            confirmations=("y",),
             timeout=20.0,
         )
 

@@ -472,6 +472,39 @@ class TestCLISession:
         assert b"y\r" in t.written
         assert "Done" in result.output
 
+    def test_run_command_confirming_does_not_reanswer_old_prompt(self):
+        """Only fresh output can request the next confirmation answer."""
+        t = MockTransport()
+        t.add_response(b"switch:>")  # initial prompt
+        t.add_response(b"Are you sure you want to proceed? (y/n)")
+        t.add_response(b"")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        session.login(Credentials())
+
+        result = session.run_command_confirming("reset config", confirmations=("y", "yes"))
+
+        assert result.success is True
+        assert t.written == [b"\r", b"reset config\r", b"y\r"]
+
+    def test_run_command_confirming_accepts_dlink_pipe_prompt(self):
+        """D-Link reboot prompt can use (y|n) instead of (y/n)."""
+        t = MockTransport()
+        t.add_response(b"switch:>")  # initial prompt
+        t.add_response(b"Are users sure want to proceed with the system reboot? (y|n)")
+        t.add_response(b"Please wait, the switch is rebooting...\n")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        session.login(Credentials())
+
+        result = session.run_command_confirming("reboot", confirmations=("y",))
+
+        assert result.success is True
+        assert b"y\r" in t.written
+        assert "rebooting" in result.output
+
     def test_transcript_stored(self):
         """Transcript хранится для диагностики."""
         t = MockTransport()

@@ -44,6 +44,8 @@ MAX_PAGER_ITERATIONS = 100
 CONFIRMATION_PATTERNS = (
     r"(?i)\(y/n\)",
     r"(?i)\[y/n\]",
+    r"(?i)\(y\|n\)",
+    r"(?i)\[y\|n\]",
     r"(?i)yes/no",
     r"(?i)are\s+you\s+sure",
     r"(?i)\bconfirm\b",
@@ -214,8 +216,10 @@ class CLISession(DeviceSession):
         to = timeout or self.command_timeout
         chunk = self._send_and_read(command.encode() + b"\r", to)
         sent = 0
-        while _needs_confirmation(chunk) and sent < len(confirmations):
-            chunk += self._send_and_read(confirmations[sent].encode() + b"\r", to)
+        fresh = chunk
+        while _needs_confirmation(fresh) and sent < len(confirmations):
+            fresh = self._send_and_read(confirmations[sent].encode() + b"\r", to)
+            chunk += fresh
             sent += 1
         return self._finish_command_output(command, chunk, to)
 

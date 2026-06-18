@@ -120,6 +120,6 @@ class DLinkAdapter(DeviceAdapter):
 def _run_confirming(session: DeviceSession, command: str) -> None:
     runner = getattr(session, "run_command_confirming", None)
     if runner:
-        runner(command, confirmations=("y", "yes"), timeout=20.0)
+        runner(command, confirmations=("y",), timeout=20.0)
         return
     session.run_command(command, timeout=20.0)
