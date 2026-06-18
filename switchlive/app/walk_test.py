@@ -324,7 +324,8 @@ class WalkTestEngine:
 
                 _progress(
                     WalkTestState.TEST_TRAFFIC,
-                    f"iperf3 → {iperf_cfg.server_host}:{iperf_cfg.server_port}",
+                    f"iperf3 TCP unlimited → {iperf_cfg.server_host}:{iperf_cfg.server_port} "
+                    f"streams={iperf_cfg.parallel_streams}",
                 )
                 iperf_result = run_iperf_test(iperf_cfg)
 

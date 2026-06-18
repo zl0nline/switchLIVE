@@ -35,6 +35,7 @@ class IperfConfig:
     server_host: str = ""
     server_port: int = 5201
     duration_sec: int = 10
+    parallel_streams: int = 4
     # Пороги
     min_throughput_mbps: float = DEFAULT_MIN_THROUGHPUT_MBPS
     max_loss_percent: float = DEFAULT_MAX_LOSS_PERCENT
@@ -97,6 +98,8 @@ def run_iperf_test(config: IperfConfig) -> IperfResult:
         "-t", str(config.duration_sec),
         "-J",  # JSON output для парсинга
     ]
+    if config.parallel_streams > 1:
+        cmd.extend(["-P", str(config.parallel_streams)])
 
     log.info("Running iperf3: %s", " ".join(cmd))
 

@@ -8,6 +8,7 @@
     "server_host": "192.168.1.100",
     "server_port": 5201,
     "duration_sec": 10,
+    "parallel_streams": 4,
     "min_throughput_mbps": 50.0,
     "max_loss_percent": 5.0
   },

@@ -24,6 +24,7 @@ class TestIperfConfig:
         cfg = IperfConfig()
         assert cfg.server_port == 5201
         assert cfg.duration_sec == 10
+        assert cfg.parallel_streams == 4
         assert cfg.min_throughput_mbps == 50.0
 
     def test_custom(self):
@@ -159,6 +160,24 @@ class TestRunIperf:
         assert result.success is True
         assert result.throughput_mbps == 950.0
         assert result.verdict == "PASS"
+        cmd = mock_run.call_args.args[0]
+        assert "-b" not in cmd
+        assert cmd[cmd.index("-P") + 1] == "4"
+
+    @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=True)
+    @patch("switchlive.app.traffic_iperf.subprocess.run")
+    def test_single_stream_does_not_pass_parallel_flag(self, mock_run, _):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"end": {"sum_received": {"bits_per_second": 100_000_000}}}),
+            stderr="",
+        )
+
+        run_iperf_test(IperfConfig(server_host="192.168.1.100", parallel_streams=1))
+
+        cmd = mock_run.call_args.args[0]
+        assert "-P" not in cmd
+        assert "-b" not in cmd
 
     @patch("switchlive.app.traffic_iperf.check_iperf3_available", return_value=True)
     @patch("switchlive.app.traffic_iperf.subprocess.run")

@@ -94,6 +94,8 @@ switchlive update
 
 - `Определение коммутатора` — serial discovery, login, vendor/model/profile.
 - `Тест портов / traffic` — discovery, uplink preflight, полный walk-test и iperf.
+- `Тест произвольных портов` — walk-test только выбранных портов, например
+  `1`, `1-15` или `1,3,7-9`.
 - `PoE тест` — отдельная проверка PoE-портов, если они есть в профиле.
 - `История тестов` — последние сохранённые запуски по модели/serial/verdict.
 - `Настройки` — пока заглушка.
@@ -114,6 +116,8 @@ cp configs/standart_login.example.txt standart_login.txt
 - `iperf.server_host`: IP хоста с `iperf3 -s`.
 - `iperf.server_port`: TCP port iperf, по умолчанию `5201`.
 - `iperf.duration_sec`: длительность traffic test.
+- `iperf.parallel_streams`: число TCP streams для насыщения линка, по
+  умолчанию `4`. Bandwidth cap не задаётся: switchLIVE не передаёт `iperf3 -b`.
 - `iperf.min_throughput_mbps`: порог WARN по throughput.
 - `iperf.max_loss_percent`: порог WARN по loss.
 - `timeouts.link_sec`: обычный timeout link/test ожиданий.

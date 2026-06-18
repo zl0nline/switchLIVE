@@ -129,10 +129,11 @@ def _print_menu() -> None:
     print()
     print("  1. 🔍 Определение коммутатора")
     print("  2. ▶️  Тест портов / traffic")
-    print("  3. ⚡ PoE тест")
-    print("  4. 📋 История тестов")
-    print("  5. ⚙️  Настройки")
-    print("  6. 🧰 Собрать debug bundle")
+    print("  3. 🎯 Тест произвольных портов")
+    print("  4. ⚡ PoE тест")
+    print("  5. 📋 История тестов")
+    print("  6. ⚙️  Настройки")
+    print("  7. 🧰 Собрать debug bundle")
     print("  0. 🚪 Выход")
     print()
 
@@ -140,7 +141,7 @@ def _print_menu() -> None:
 def _print_bottom_menu() -> None:
     print()
     print("-" * 50)
-    print("  Команды: 1 определить | 2 порты | 3 PoE | 4 история | 5 настройки | 6 debug | 0 выход")
+    print("  Команды: 1 определить | 2 порты | 3 выбор | 4 PoE | 5 история | 6 настройки | 7 debug | 0 выход")
     print("-" * 50)
     print()
 
@@ -300,15 +301,18 @@ def show_start_menu(
                 _handle_test_menu(config)
                 _print_bottom_menu()
             elif choice == "3":
-                _handle_poe_test_menu(config)
+                _handle_selected_ports_test_menu(config)
                 _print_bottom_menu()
             elif choice == "4":
-                _handle_history_menu(config)
+                _handle_poe_test_menu(config)
                 _print_bottom_menu()
             elif choice == "5":
-                print("\n  ⚠️ Настройки — ещё не реализовано\n")
+                _handle_history_menu(config)
                 _print_bottom_menu()
             elif choice == "6":
+                print("\n  ⚠️ Настройки — ещё не реализовано\n")
+                _print_bottom_menu()
+            elif choice == "7":
                 _handle_debug_bundle(config, config_path, debug_context)
                 _print_bottom_menu()
             else:
@@ -365,6 +369,71 @@ def _handle_test_menu(config: Config) -> None:
     if uplink:
         skip_indexes.add(uplink.index)
 
+    _run_walk_test_flow(
+        adapter=adapter,
+        session=session,
+        identity=discovery.identity,
+        ports=ports,
+        config=config,
+        skip_indexes=skip_indexes,
+        comments="traffic walk-test",
+    )
+
+
+def _handle_selected_ports_test_menu(config: Config) -> None:
+    """Walk-test wizard for an operator-selected port subset."""
+    _section("Тест произвольных портов")
+    discovery = _run_discovery_wizard(config)
+    if not discovery.found or not discovery.adapter or not discovery.session:
+        print(_c("  [FAIL] Сначала не удалось определить устройство", "red"))
+        return
+
+    _print_device_summary(discovery)
+    adapter = discovery.adapter
+    session = discovery.session
+    if not _ensure_factory_default_before_test(adapter, session):
+        return
+
+    ports = adapter.list_ports(session)
+    selected = _select_ports_from_operator(ports)
+    if not selected:
+        return
+
+    uplink_ready, uplink = _prepare_uplink(adapter, session, ports, config)
+    if not uplink_ready:
+        return
+
+    skip_indexes = set()
+    if uplink:
+        skip_indexes.add(uplink.index)
+
+    selected_after_skip = [port for port in selected if port.index not in skip_indexes]
+    if not selected_after_skip:
+        print(_c("  [STOP] Все выбранные порты совпали с uplink/skip-портами.", "yellow"))
+        return
+
+    _run_walk_test_flow(
+        adapter=adapter,
+        session=session,
+        identity=discovery.identity,
+        ports=selected_after_skip,
+        config=config,
+        skip_indexes=skip_indexes,
+        comments=f"selected ports: {_format_port_indexes(selected_after_skip)}",
+    )
+
+
+def _run_walk_test_flow(
+    *,
+    adapter,
+    session,
+    identity,
+    ports: list[PortInfo],
+    config: Config,
+    skip_indexes: set[int],
+    comments: str,
+) -> None:
+    """Run walk-test for provided ports and save reports."""
     test_config = _configure_walk_test(config, skip_port_indexes=skip_indexes)
     engine = WalkTestEngine(adapter, session, test_config)
 
@@ -391,12 +460,87 @@ def _handle_test_menu(config: Config) -> None:
     _persist_test_artifacts(
         adapter=adapter,
         session=session,
-        identity=discovery.identity,
+        identity=identity,
         results=results,
         started_at=started_at,
         config=config,
-        comments="traffic walk-test",
+        comments=comments,
     )
+
+
+def _select_ports_from_operator(ports: list[PortInfo]) -> list[PortInfo]:
+    """Ask operator for port indexes/ranges and return matching ports."""
+    available = _format_port_indexes(ports)
+    answer = input(f"  Порты для теста ({available}; пример 1,3,7-9): ").strip()
+    try:
+        indexes = _parse_port_selection(answer)
+    except ValueError as e:
+        print(_c(f"  [FAIL] Неверный список портов: {e}", "red"))
+        return []
+
+    if not indexes:
+        print(_c("  [STOP] Порты не выбраны.", "yellow"))
+        return []
+
+    by_index = {port.index: port for port in ports}
+    unknown = sorted(index for index in indexes if index not in by_index)
+    if unknown:
+        print(_c(f"  [FAIL] В профиле нет портов: {_format_indexes(unknown)}", "red"))
+        return []
+
+    selected = [by_index[index] for index in sorted(indexes)]
+    print(f"  Выбрано портов: {len(selected)} ({_format_port_indexes(selected)})")
+    if not _confirm("  Запустить тест выбранных портов?", default=True):
+        print("  Тест отменён оператором.")
+        return []
+    return selected
+
+
+def _parse_port_selection(value: str) -> set[int]:
+    """Parse port selection like '1', '1-4', '1,3,7-9'."""
+    indexes: set[int] = set()
+    for token in re.split(r"[\s,;]+", value.strip()):
+        if not token:
+            continue
+        if "-" in token:
+            start_text, end_text = token.split("-", 1)
+            if not start_text.isdigit() or not end_text.isdigit():
+                raise ValueError(token)
+            start = int(start_text)
+            end = int(end_text)
+            if start <= 0 or end <= 0:
+                raise ValueError(token)
+            if end < start:
+                raise ValueError(token)
+            indexes.update(range(start, end + 1))
+            continue
+        if not token.isdigit():
+            raise ValueError(token)
+        index = int(token)
+        if index <= 0:
+            raise ValueError(token)
+        indexes.add(index)
+    return indexes
+
+
+def _format_port_indexes(ports: list[PortInfo]) -> str:
+    return _format_indexes(sorted(port.index for port in ports))
+
+
+def _format_indexes(indexes: list[int]) -> str:
+    if not indexes:
+        return ""
+
+    ranges: list[str] = []
+    start = prev = indexes[0]
+    for index in indexes[1:]:
+        if index == prev + 1:
+            prev = index
+            continue
+        ranges.append(f"{start}-{prev}" if start != prev else str(start))
+        start = prev = index
+    ranges.append(f"{start}-{prev}" if start != prev else str(start))
+    return ",".join(ranges)
 
 
 def _handle_poe_test_menu(config: Config) -> None:
@@ -564,8 +708,13 @@ def _configure_walk_test(
                 server_host=server_ip,
                 server_port=config.iperf_server_port,
                 duration_sec=config.iperf_duration,
+                parallel_streams=config.iperf_parallel_streams,
                 min_throughput_mbps=config.iperf_min_throughput_mbps,
                 max_loss_percent=config.iperf_max_loss_percent,
+            )
+            print(
+                "  iperf режим: TCP без bandwidth limit"
+                f", streams={config.iperf_parallel_streams}"
             )
     else:
         print(_c("  [WARN] iperf3 не найден, трафик-тест будет пропущен.", "yellow"))

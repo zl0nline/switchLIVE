@@ -114,6 +114,8 @@ Edit `switchlive.json` for the workbench:
 - `serial.default_baudrates`: baudrates tried during discovery.
 - `standard_login_file`: path to standard credentials.
 - `iperf.server_host`: test host IP.
+- `iperf.parallel_streams`: TCP streams for traffic test saturation. Default
+  is `4`; switchLIVE does not set an iperf bandwidth cap (`-b`).
 - `reports.report_dir`: where HTML/CSV reports are written.
 - `reports.db_path`: SQLite history database path.
 - `timeouts.link_sec`: normal link/test wait.

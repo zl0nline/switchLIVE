@@ -13,7 +13,9 @@ from switchlive.ui.console import (
     _configure_walk_test,
     _DiscoveryProgressPrinter,
     _ensure_factory_default_before_test,
+    _format_port_indexes,
     _format_port_result,
+    _parse_port_selection,
     _prepare_uplink,
     _print_bottom_menu,
     _progress_bar,
@@ -167,6 +169,7 @@ class TestConfigureWalkTest:
         assert cfg.iperf_config.server_host == "192.0.2.30"
         assert cfg.iperf_config.server_port == 5202
         assert cfg.iperf_config.duration_sec == 7
+        assert cfg.iperf_config.parallel_streams == 4
         assert cfg.iperf_config.min_throughput_mbps == 100.0
         assert cfg.iperf_config.max_loss_percent == 1.5
         assert cfg.timeout_policy.base == 12
@@ -174,6 +177,21 @@ class TestConfigureWalkTest:
         assert cfg.timeout_policy.max == 56
         assert cfg.run_poe is False
         assert cfg.poe_camera_ip == ""
+
+    def test_parse_port_selection_accepts_ranges_and_lists(self):
+        assert _parse_port_selection("1-2") == {1, 2}
+        assert _parse_port_selection("1,3,7-9") == {1, 3, 7, 8, 9}
+        assert _parse_port_selection("15") == {15}
+
+    def test_parse_port_selection_rejects_invalid_ranges(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            _parse_port_selection("9-7")
+
+    def test_format_port_indexes_compacts_ranges(self):
+        ports = [PortInfo(index=i, name=str(i)) for i in [1, 2, 3, 7, 9, 10]]
+        assert _format_port_indexes(ports) == "1-3,7,9-10"
 
     @patch("builtins.input", return_value="192.0.2.20")
     def test_poe_config_is_separate(self, _input):
