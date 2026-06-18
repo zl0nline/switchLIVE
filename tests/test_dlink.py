@@ -345,14 +345,8 @@ class TestDLinkAdapter:
 
         adapter.factory_reset(session)
 
-        assert session.run_command_confirming.call_count == 2
-        session.run_command_confirming.assert_any_call(
-            "reset config",
-            confirmations=("y",),
-            timeout=20.0,
-        )
-        session.run_command_confirming.assert_any_call(
-            "reboot",
+        session.run_command_confirming.assert_called_once_with(
+            "reset system force_agree",
             confirmations=("y",),
             timeout=20.0,
         )

@@ -114,6 +114,8 @@ class DLinkAdapter(DeviceAdapter):
     def factory_reset(self, session: DeviceSession) -> None:
         if self._profile.factory_reset_cmd:
             _run_confirming(session, self._profile.factory_reset_cmd)
+            if "system" in self._profile.factory_reset_cmd.lower():
+                return
         _run_confirming(session, self._profile.reload_cmd)
 
 

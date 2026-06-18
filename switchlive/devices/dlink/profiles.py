@@ -33,10 +33,10 @@ class DLinkBase(DeviceProfile):
     shutdown_cmd = "config ports {port} state disable"
     no_shutdown_cmd = "config ports {port} state enable"
     save_config_cmd = "save"
-    reload_cmd = "reboot"
+    reload_cmd = "reboot force_agree"
 
     show_transceiver_cmd = "show transceiver"
-    factory_reset_cmd = "reset config"
+    factory_reset_cmd = "reset system force_agree"
 
 
 # --- Семейства ---
