@@ -310,7 +310,12 @@ def _try_login(
             return None
     else:
         # Есть стандартные логины — проверяем, не в командном ли мы уже режиме.
-        from switchlive.sessions.prompts import find_command_prompt_current, match_login_current
+        from switchlive.sessions.prompts import (
+            contains_auth_retry,
+            find_command_prompt_current,
+            match_login_current,
+            match_password_current,
+        )
 
         chunk = session._read_buffered(session.prompt_timeout)
         if not chunk.strip():
@@ -321,6 +326,20 @@ def _try_login(
             session._prompt = prompt
             progress("  Логин не требуется (уже в командном режиме)")
             return "none"
+
+        # DGS-3120: после "Press any key to login..." первый \r уходит как
+        # пустой username → PassWord: без UserName:. Отправим \r,
+        # чтобы получить Fail! и вернуться к UserName:.
+        # Также: "Press any key to login" → отправляем \r и читаем повторно.
+        wake_retries = 0
+        while (
+            (contains_auth_retry(chunk) or match_password_current(chunk))
+            and not match_login_current(chunk)
+            and wake_retries < 5
+        ):
+            chunk = session._send_and_read(b"\r", session.prompt_timeout, delay=0.5)
+            wake_retries += 1
+
         # Если в выводе есть login prompt — запомним для login()
         if match_login_current(chunk):
             session._at_login_prompt = True

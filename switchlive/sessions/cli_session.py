@@ -128,6 +128,7 @@ class CLISession(DeviceSession):
                     return True
 
                 # Auth retry screen? (Eltex: "press ENTER key to retry authentication")
+                # Также: D-Link "Press any key to login..."
                 auth_retries = 0
                 while contains_auth_retry(chunk) and not match_login_current(chunk) and auth_retries < 3:
                     chunk = self._send_and_read(b"\r", self.prompt_timeout)

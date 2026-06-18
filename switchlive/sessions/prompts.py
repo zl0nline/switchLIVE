@@ -76,6 +76,7 @@ LOGIN_FAILED_PATTERNS = [
 
 AUTH_RETRY_PATTERNS = [
     r"(?i)press\s+enter\s+key\s+to\s+retry\s+authentication",
+    r"(?i)press\s+any\s+key\s+to\s+login",
 ]
 
 AUTH_LOCKOUT_PATTERNS = [
