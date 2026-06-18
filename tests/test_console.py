@@ -75,6 +75,15 @@ class TestConfigureWalkTest:
         _run_discovery_wizard(config)
 
         assert run_discovery.call_args.kwargs["standard_logins_path"] == "custom-login.txt"
+        assert run_discovery.call_args.kwargs["baudrates"] == (9600, 115200)
+
+    @patch("switchlive.ui.console.run_discovery")
+    def test_discovery_uses_config_baudrates(self, run_discovery):
+        config = Config.from_dict({"serial": {"default_baudrates": [115200, 9600, 57600]}})
+
+        _run_discovery_wizard(config)
+
+        assert run_discovery.call_args.kwargs["baudrates"] == (115200, 9600, 57600)
 
     @patch("switchlive.ui.console.check_iperf3_available", return_value=False)
     @patch("builtins.input", return_value="")

@@ -10,8 +10,8 @@ from switchlive.devices.eltex.detector import EltexDetector
 from switchlive.devices.eltex.parsers import (
     parse_counters,
     parse_mac_table,
-    parse_show_inventory,
     parse_show_interfaces_status,
+    parse_show_inventory,
     parse_show_version,
     parse_transceiver,
 )
@@ -106,9 +106,9 @@ console#
 
     def test_parse_show_inventory_real_output(self):
         """Реальный вывод show inventory с MES2324 AC."""
-        output = '''NAME: "1"   DESCR: "28-port 1G/10G Managed Switch"   
+        output = '''NAME: "1"   DESCR: "28-port 1G/10G Managed Switch"
 
-PID: MES2324 AC   VID: 0   SN: ES2A015942   
+PID: MES2324 AC   VID: 0   SN: ES2A015942
 
 
 
@@ -170,10 +170,10 @@ console#'''
 class TestEltexParserInterfacesStatus:
     def test_parse_interfaces_status_real_output(self):
         """Реальный вывод show interfaces status с MES2324."""
-        output = """Port     Type         Duplex  Speed Neg      ctrl State         
-gi1/0/1  1G-Copper      --      --     --     --  Down (nc)         
-gi1/0/23 1G-Copper    Full    100   Enabled  Off  Up          00,00:02:09   
-te1/0/1  10G-Fiber      --      --     --     --  Down (nc)         
+        output = """Port     Type         Duplex  Speed Neg      ctrl State
+gi1/0/1  1G-Copper      --      --     --     --  Down (nc)
+gi1/0/23 1G-Copper    Full    100   Enabled  Off  Up          00,00:02:09
+te1/0/1  10G-Fiber      --      --     --     --  Down (nc)
 """
         result = parse_show_interfaces_status(output)
         assert "gi1/0/1" in result

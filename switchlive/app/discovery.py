@@ -50,6 +50,7 @@ def run_discovery(
     standard_logins_path: str = "standart_login.txt",
     manual_credential_callback=None,
     progress_callback=None,
+    baudrates: tuple[int, ...] | list[int] | None = None,
 ) -> DiscoveryResult:
     """Автопоиск устройства по всем COM-портам.
 
@@ -58,6 +59,7 @@ def run_discovery(
         manual_credential_callback: функция(credentials_list) -> Credentials | None
             для запроса логина/пароля у оператора.
         progress_callback: функция(message: str) — для UI обновлений.
+        baudrates: список скоростей serial console для проверки.
 
     Returns:
         DiscoveryResult с найденным устройством или ошибкой.
@@ -70,6 +72,7 @@ def run_discovery(
     # Загрузить стандартные логины
     standard_creds = load_standard_logins(standard_logins_path)
     _progress(f"Загружено стандартных логинов: {len(standard_creds)}")
+    baudrates = tuple(baudrates or (9600, 115200))
 
     # Получить список портов
     ports = list_serial_ports()
@@ -108,6 +111,7 @@ def run_discovery(
             manual_credential_callback,
             detectors,
             _progress,
+            baudrates,
         )
 
         if had_output:
@@ -117,11 +121,12 @@ def run_discovery(
             return result
 
     if not any_console_output:
+        baudrate_list = ", ".join(str(baudrate) for baudrate in baudrates)
         _progress("Устройство не найдено ни на одном порту")
         return DiscoveryResult(
             found=False,
             error=(
-                "Нет ответа от консоли ни на одной скорости (9600, 115200). "
+                f"Нет ответа от консоли ни на одной скорости ({baudrate_list}). "
                 "Возможно, коммутатор не работает. "
                 "Попробуйте перезагрузить коммутатор по питанию и повторить."
             ),
@@ -137,12 +142,12 @@ def _try_port(
     manual_credential_callback,
     detectors: list[DeviceDetector],
     progress,
+    baudrates: tuple[int, ...] = (9600, 115200),
 ) -> tuple[DiscoveryResult | None, bool]:
     """Попробовать найти устройство на конкретном порту.
 
     Returns: (result, had_any_output)
     """
-    baudrates = (9600, 115200)
     manual_baudrates: list[int] = []
     had_any_output = False
 

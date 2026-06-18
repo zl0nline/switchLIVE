@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from switchlive.core.models import DeviceIdentity, MacEntry, PortInfo
+from switchlive.core.models import DeviceIdentity, LinkStatus, MacEntry, PortInfo
 from switchlive.devices.base import DeviceAdapter, DeviceProfile, DeviceSession
 from switchlive.devices.eltex.parsers import (
     parse_counters,
@@ -14,7 +14,6 @@ from switchlive.devices.eltex.parsers import (
     parse_transceiver,
 )
 from switchlive.devices.eltex.profiles import EltexBase, EltexMES2324B, get_profile_for_model
-from switchlive.core.models import LinkStatus
 
 log = logging.getLogger(__name__)
 

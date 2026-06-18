@@ -3,6 +3,13 @@
 import argparse
 import sys
 
+from switchlive.app.console_probe import (
+    baudrates_from_config,
+    format_probe_report,
+    parse_baudrates,
+    probe_console,
+    write_probe_samples,
+)
 from switchlive.config import Config
 from switchlive.diagnostics import collect_debug_bundle, configure_logging
 from switchlive.ui.console import show_start_menu
@@ -25,6 +32,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Debug bundle: {bundle}")
         return 0
 
+    if args.command == "console-probe":
+        baudrates = parse_baudrates(args.baudrates) if args.baudrates else baudrates_from_config(config)
+        results = probe_console(
+            ports=args.port,
+            baudrates=baudrates,
+            timeout=args.timeout,
+            wakeup=not args.no_wakeup,
+        )
+        print(format_probe_report(results))
+        if args.output_dir:
+            written = write_probe_samples(results, args.output_dir)
+            if written:
+                print("Saved samples:")
+                for path in written:
+                    print(f"- {path}")
+        return 0
+
     show_start_menu(config=config, config_path=args.config, debug_context=context)
     return 0
 
@@ -45,6 +69,36 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--bug-report",
         action="store_true",
         help="create a sanitized debug bundle and exit",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    probe = subparsers.add_parser(
+        "console-probe",
+        help="probe serial console output across configured baudrates",
+    )
+    probe.add_argument(
+        "--port",
+        action="append",
+        help="serial port to probe; can be passed multiple times; defaults to auto-detected USB serial ports",
+    )
+    probe.add_argument(
+        "--baudrates",
+        help="comma or space separated baudrates; defaults to serial.default_baudrates from config",
+    )
+    probe.add_argument(
+        "--timeout",
+        type=float,
+        default=1.0,
+        help="seconds to wait for output at each baudrate",
+    )
+    probe.add_argument(
+        "--no-wakeup",
+        action="store_true",
+        help="do not send Enter before reading console output",
+    )
+    probe.add_argument(
+        "--output-dir",
+        help="write non-empty console samples to this directory",
     )
     return parser.parse_args(argv)
 

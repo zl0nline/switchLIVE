@@ -304,6 +304,29 @@ class TestRunDiscovery:
         assert calls == [None, None]
         manual_callback.assert_not_called()
 
+    def test_try_port_uses_configured_baudrates(self):
+        manual_callback = MagicMock()
+        detector = MagicMock()
+        checked_baudrates = []
+
+        def fake_try_baudrate(*args, **kwargs):
+            checked_baudrates.append(args[1])
+            return None, False
+
+        with patch("switchlive.app.discovery._try_baudrate", side_effect=fake_try_baudrate):
+            result, had_output = _try_port(
+                "/dev/ttyUSB0",
+                [],
+                manual_callback,
+                [detector],
+                lambda msg: None,
+                baudrates=(115200, 9600, 57600),
+            )
+
+        assert result is None
+        assert had_output is False
+        assert checked_baudrates == [115200, 9600, 57600]
+
     def test_try_port_defers_manual_login_until_auto_baudrates_fail(self):
         manual_callback = MagicMock()
         detector = MagicMock()

@@ -64,6 +64,19 @@ switchlive --config switchlive.json
 switchlive --help
 ```
 
+Быстрая проверка serial console без логина и без запуска полного discovery:
+
+```bash
+switchlive console-probe
+switchlive console-probe --port /dev/ttyUSB0 --baudrates 9600,115200
+switchlive console-probe --output-dir logs/console-probe
+```
+
+`console-probe` пробует скорости из `serial.default_baudrates` в конфиге,
+по умолчанию `9600` и `115200`, отправляет Enter, читает короткий RX-сэмпл и
+показывает `READABLE`, `GARBLED` или `SILENT`. Это полезно, когда непонятно,
+на какой скорости коммутатор отдаёт консоль.
+
 ## Меню
 
 Интерактивный режим показывает:
@@ -98,6 +111,8 @@ cp configs/standart_login.example.txt standart_login.txt
 - `reports.report_dir`: директория HTML/CSV отчётов.
 - `reports.db_path`: SQLite history database.
 - `debug`: включает debug logging без CLI-флага `--debug`.
+- `serial.default_baudrates`: скорости для `console-probe` и полевой проверки
+  консоли, обычно `[9600, 115200]`.
 
 Секреты держите вне git. Файл `standart_login.txt` имеет формат:
 

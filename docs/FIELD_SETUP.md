@@ -49,6 +49,33 @@ Common symptoms:
 - `pyserial не установлен`: do not run through `sudo`; install with
   `scripts/install-linux.sh` and run `switchlive` as the operator user.
 
+### Console baudrate probe
+
+Some switches speak at `9600`, others at `115200`. Before running the full menu,
+check whether the console returns readable output at the expected speeds:
+
+```bash
+switchlive console-probe
+```
+
+For a known adapter:
+
+```bash
+switchlive console-probe --port /dev/ttyUSB0 --baudrates 9600,115200
+```
+
+The probe sends Enter, waits briefly and prints:
+
+- `READABLE`: text looks like a login prompt or CLI prompt.
+- `GARBLED`: bytes arrived, but this is probably the wrong baudrate.
+- `SILENT`: no bytes arrived during the timeout.
+
+To save non-empty samples for a bug report:
+
+```bash
+switchlive console-probe --port /dev/ttyUSB0 --output-dir logs/console-probe
+```
+
 ### Install switchLIVE
 
 ```bash

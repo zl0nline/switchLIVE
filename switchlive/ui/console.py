@@ -8,6 +8,7 @@ import sys
 import time
 from datetime import datetime
 
+from switchlive.app.console_probe import baudrates_from_config
 from switchlive.app.discovery import run_discovery
 from switchlive.app.finalize import FinalizeConfig, finalize_after_test
 from switchlive.app.port_detection import (
@@ -242,6 +243,7 @@ def _run_discovery_wizard(config: Config):
             standard_logins_path=config.standard_login_file,
             manual_credential_callback=_manual_credential_prompt,
             progress_callback=progress,
+            baudrates=baudrates_from_config(config),
         )
     finally:
         progress.finish()
