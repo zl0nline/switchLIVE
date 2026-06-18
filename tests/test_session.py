@@ -164,6 +164,15 @@ class TestPager:
         assert detect_pager("Press any key to continue") is True
         assert detect_pager("Press q to quit") is True
 
+    def test_detect_dlink_ansi_pager_menu(self):
+        text = (
+            "\x1b[7mCTRL+C\x1b[0m \x1b[7mESC\x1b[0m "
+            "\x1b[7mq\x1b[0m Quit \x1b[7mSPACE\x1b[0m "
+            "\x1b[7mn\x1b[0m Next Page \x1b[7mENTER\x1b[0m Next Entry"
+        )
+
+        assert detect_pager(text) is True
+
     def test_detect_pager_none(self):
         assert detect_pager("normal output") is False
         assert detect_pager("interface config") is False
@@ -422,6 +431,29 @@ class TestCLISession:
         assert "line1" in result.output
         assert "line2" in result.output
         assert "--More--" not in result.output  # пейджер убран
+
+    def test_run_command_with_dlink_pager_menu(self):
+        """D-Link DES pager menu must be treated as pager, not command end."""
+        t = MockTransport()
+        t.add_response(b"switch:>")  # initial prompt
+        t.add_response(
+            b"line1\n"
+            b"\x1b[7mCTRL+C\x1b[0m \x1b[7mESC\x1b[0m "
+            b"\x1b[7mq\x1b[0m Quit \x1b[7mSPACE\x1b[0m "
+            b"\x1b[7mn\x1b[0m Next Page\n"
+        )
+        t.add_response(b"line2\nswitch:>")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        session.login(Credentials())
+
+        result = session.run_command("show switch")
+
+        assert result.success is True
+        assert "line1" in result.output
+        assert "line2" in result.output
+        assert t.written[-1] == b" "
 
     def test_transcript_stored(self):
         """Transcript хранится для диагностики."""

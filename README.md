@@ -12,6 +12,8 @@
 - Автоопределение устройства через serial console.
 - Авторизация стандартными логинами из `standart_login.txt` с ручным fallback.
 - Walk-test портов по профилю устройства.
+- Pre-test проверка factory-default состояния для D-Link: если устройство
+  выглядит уже настроенным, тест блокируется и предлагается reset/reboot.
 - Определение активного порта по MAC-table.
 - Link/counters checks.
 - PoE probe с нормализованным verdict, независимо от Ethernet verdict.

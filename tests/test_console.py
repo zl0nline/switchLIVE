@@ -12,6 +12,7 @@ from switchlive.ui.console import (
     _configure_poe_test,
     _configure_walk_test,
     _DiscoveryProgressPrinter,
+    _ensure_factory_default_before_test,
     _format_port_result,
     _prepare_uplink,
     _print_bottom_menu,
@@ -92,6 +93,41 @@ class TestConfigureWalkTest:
         _close_discovery_session(result)
 
         result.session.transport.close.assert_called_once()
+
+    @patch("switchlive.ui.console.check_default_state")
+    def test_default_state_gate_allows_clean_device(self, check_default):
+        check_default.return_value = MagicMock(supported=True, is_default=True)
+
+        assert _ensure_factory_default_before_test(MagicMock(), MagicMock()) is True
+
+    @patch("switchlive.ui.console.check_default_state")
+    @patch("builtins.input", return_value="n")
+    def test_default_state_gate_blocks_dirty_device_without_reset(self, _input, check_default):
+        check_default.return_value = MagicMock(
+            supported=True,
+            is_default=False,
+            reasons=["manual IP address: 10.0.0.2"],
+        )
+
+        adapter = MagicMock()
+
+        assert _ensure_factory_default_before_test(adapter, MagicMock()) is False
+        adapter.factory_reset.assert_not_called()
+
+    @patch("switchlive.ui.console.check_default_state")
+    @patch("builtins.input", return_value="")
+    def test_default_state_gate_runs_reset_when_confirmed(self, _input, check_default):
+        check_default.return_value = MagicMock(
+            supported=True,
+            is_default=False,
+            reasons=["custom VLAN name: MNG"],
+        )
+
+        adapter = MagicMock()
+        session = MagicMock()
+
+        assert _ensure_factory_default_before_test(adapter, session) is False
+        adapter.factory_reset.assert_called_once_with(session)
 
     @patch("switchlive.ui.console.check_iperf3_available", return_value=False)
     @patch("builtins.input", return_value="")

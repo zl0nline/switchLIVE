@@ -11,6 +11,7 @@ from switchlive.devices.dlink.parsers import (
     parse_poe_status,
     parse_show_ports,
     parse_show_switch,
+    parse_show_switch_default_state,
     parse_transceiver,
 )
 from switchlive.devices.dlink.profiles import (
@@ -192,6 +193,38 @@ class TestParsers:
         ident = parse_show_switch("garbage output")
         assert ident.model == "unknown"
         assert ident.serial == "unknown"
+
+    def test_parse_show_switch_default_state_flags_dirty_config(self):
+        output = """
+        IP Address : 10.208.31.95 (Manual)
+        VLAN Name : MNG
+        System Name : Acc-208.0-95
+        System Location : Acc-208.0-95
+        System Contact : admin@example.net
+        IGMP Snooping : Enabled
+        """
+
+        is_default, reasons, evidence = parse_show_switch_default_state(output)
+
+        assert is_default is False
+        assert "10.208.31.95" in evidence["ip_address"]
+        assert any("manual IP" in reason for reason in reasons)
+        assert any("custom VLAN" in reason for reason in reasons)
+
+    def test_parse_show_switch_default_state_accepts_empty_defaultish_output(self):
+        output = """
+        IP Address : 10.90.90.90 (Manual)
+        VLAN Name : default
+        GVRP : Disabled
+        IGMP Snooping : Disabled
+        VLAN Trunk : Disabled
+        802.1X : Disabled
+        """
+
+        is_default, reasons, _evidence = parse_show_switch_default_state(output)
+
+        assert is_default is True
+        assert reasons == []
 
     def test_parse_show_ports(self):
         output = """

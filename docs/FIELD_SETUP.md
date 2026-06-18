@@ -125,6 +125,12 @@ Keep real credentials outside git.
 
 Use a second host on the test network for traffic checks.
 
+Before traffic or PoE tests, switchLIVE checks D-Link `show switch` output for
+obvious non-default state, such as manual management IP, custom VLAN name or
+custom system identity. If dirty state is detected, the test is stopped and the
+operator is offered factory reset/reboot first. This avoids testing ports while
+old VLAN/port configuration can break the traffic path.
+
 Install iperf3:
 
 ```bash

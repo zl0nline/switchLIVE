@@ -35,6 +35,55 @@ def parse_show_switch(output: str) -> DeviceIdentity:
     )
 
 
+def parse_show_switch_default_state(output: str) -> tuple[bool, list[str], dict[str, str]]:
+    """Best-effort check that D-Link switch is still in factory/default state."""
+    evidence = {
+        key: value
+        for key, value in {
+            "ip_address": _extract_field(output, r"IP\s*Address\s*:\s*(.+)"),
+            "vlan_name": _extract_field(output, r"VLAN\s*Name\s*:\s*(.+)"),
+            "system_name": _extract_field(output, r"System\s*Name\s*:\s*(.+)"),
+            "system_location": _extract_field(output, r"System\s*Location\s*:\s*(.+)"),
+            "system_contact": _extract_field(output, r"System\s*Contact\s*:\s*(.+)"),
+            "gvrp": _extract_field(output, r"GVRP\s*:\s*(.+)"),
+            "igmp_snooping": _extract_field(output, r"IGMP\s*Snooping\s*:\s*(.+)"),
+            "vlan_trunk": _extract_field(output, r"VLAN\s*Trunk\s*:\s*(.+)"),
+            "dot1x": _extract_field(output, r"802\.1X\s*:\s*(.+)"),
+        }.items()
+        if value
+    }
+
+    reasons: list[str] = []
+    ip_address = evidence.get("ip_address", "")
+    if "(manual)" in ip_address.lower() and not _looks_like_default_ip(ip_address):
+        reasons.append(f"manual IP address: {ip_address}")
+
+    vlan_name = evidence.get("vlan_name", "")
+    if vlan_name and vlan_name.strip().lower() not in ("default", "1"):
+        reasons.append(f"custom VLAN name: {vlan_name}")
+
+    for key, label in (
+        ("system_name", "system name"),
+        ("system_location", "system location"),
+        ("system_contact", "system contact"),
+    ):
+        value = evidence.get(key, "").strip()
+        if value and value.lower() not in ("default", "system", "switch"):
+            reasons.append(f"custom {label}: {value}")
+
+    for key, label in (
+        ("gvrp", "GVRP"),
+        ("igmp_snooping", "IGMP snooping"),
+        ("vlan_trunk", "VLAN trunk"),
+        ("dot1x", "802.1X"),
+    ):
+        value = evidence.get(key, "").strip()
+        if value.lower().startswith("enabled"):
+            reasons.append(f"{label} enabled")
+
+    return not reasons, reasons, evidence
+
+
 def parse_show_ports(output: str) -> list[PortInfo]:
     """Парсинг 'show ports' для D-Link.
 
@@ -245,6 +294,11 @@ def _extract_number(text: str, pattern: str) -> int | float | None:
             except ValueError:
                 return None
     return None
+
+
+def _looks_like_default_ip(value: str) -> bool:
+    address = value.split()[0].strip()
+    return address in ("0.0.0.0", "10.90.90.90", "192.168.0.1")
 
 
 def _parse_speed(speed_str: str) -> int:

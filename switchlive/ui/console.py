@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 from switchlive.app.console_probe import baudrates_from_config
+from switchlive.app.default_state import check_default_state
 from switchlive.app.discovery import run_discovery
 from switchlive.app.finalize import FinalizeConfig, finalize_after_test
 from switchlive.app.port_detection import (
@@ -346,6 +347,9 @@ def _handle_test_menu(config: Config) -> None:
     _print_device_summary(discovery)
     adapter = discovery.adapter
     session = discovery.session
+    if not _ensure_factory_default_before_test(adapter, session):
+        return
+
     ports = adapter.list_ports(session)
     print()
     print(f"  Профиль теста: {len(ports)} портов, vendor adapter: {type(adapter).__name__}")
@@ -406,6 +410,9 @@ def _handle_poe_test_menu(config: Config) -> None:
     _print_device_summary(discovery)
     adapter = discovery.adapter
     session = discovery.session
+    if not _ensure_factory_default_before_test(adapter, session):
+        return
+
     poe_ports = [port for port in adapter.list_ports(session) if port.supports_poe]
     if not poe_ports:
         print(_c("  [SKIP] В профиле устройства нет PoE-портов", "yellow"))
@@ -466,6 +473,31 @@ def _handle_history_menu(config: Config) -> None:
             f"ports={row.get('port_count', 0)} "
             f"overall={row['overall_verdict']}"
         )
+
+
+def _ensure_factory_default_before_test(adapter, session) -> bool:
+    """Block tests on a configured switch; offer factory reset first."""
+    state = check_default_state(adapter, session)
+    if not state.supported or state.is_default:
+        return True
+
+    print()
+    print(_c("  [WARN] Коммутатор не похож на factory default", "yellow"))
+    for reason in state.reasons[:8]:
+        print(f"     - {reason}")
+
+    if not _confirm("  Сбросить конфигурацию в default и перезагрузить перед тестом?", default=True):
+        print(_c("  [STOP] Тест отменён: dirty config может сломать traffic test.", "yellow"))
+        return False
+
+    try:
+        adapter.factory_reset(session)
+    except Exception as e:
+        print(_c(f"  [FAIL] Не удалось запустить factory reset: {e}", "red"))
+        return False
+
+    print(_c("  [OK] Factory reset/reboot запущен. После загрузки запустите тест снова.", "green"))
+    return False
 
 
 def _persist_test_artifacts(
