@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from switchlive.core.models import LinkStatus
 from switchlive.devices.dlink.adapter import DLinkAdapter
 from switchlive.devices.dlink.parsers import (
@@ -337,6 +339,24 @@ class TestParsers:
 # --- Тесты адаптера ---
 
 class TestDLinkAdapter:
+    def test_factory_reset_answers_confirmation_prompts(self):
+        adapter = DLinkAdapter()
+        session = MagicMock()
+
+        adapter.factory_reset(session)
+
+        assert session.run_command_confirming.call_count == 2
+        session.run_command_confirming.assert_any_call(
+            "reset config",
+            confirmations=("y", "yes"),
+            timeout=20.0,
+        )
+        session.run_command_confirming.assert_any_call(
+            "reboot",
+            confirmations=("y", "yes"),
+            timeout=20.0,
+        )
+
     def test_adapter_init(self):
         adapter = DLinkAdapter()
         assert adapter.profile is not None

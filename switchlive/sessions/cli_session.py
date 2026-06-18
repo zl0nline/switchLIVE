@@ -16,6 +16,7 @@ Login flow — state-machine по свежему output chunk:
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from switchlive.core.credentials import Credentials
@@ -40,6 +41,14 @@ from switchlive.transports.base import CommandTransport
 log = logging.getLogger(__name__)
 
 MAX_PAGER_ITERATIONS = 100
+CONFIRMATION_PATTERNS = (
+    r"(?i)\(y/n\)",
+    r"(?i)\[y/n\]",
+    r"(?i)yes/no",
+    r"(?i)are\s+you\s+sure",
+    r"(?i)\bconfirm\b",
+    r"(?i)continue\?",
+)
 
 
 class CLISession(DeviceSession):
@@ -190,10 +199,31 @@ class CLISession(DeviceSession):
             command.encode() + b"\r", to
         )
 
-        # Обработка пейджера
+        return self._finish_command_output(command, chunk, to)
+
+    def run_command_confirming(
+        self,
+        command: str,
+        confirmations: tuple[str, ...] = ("y", "yes"),
+        timeout: float | None = None,
+    ) -> CommandResult:
+        """Run command and answer interactive confirmation prompts."""
+        if not self._prompt:
+            raise SessionError("Сессия не готова: нет промпта")
+
+        to = timeout or self.command_timeout
+        chunk = self._send_and_read(command.encode() + b"\r", to)
+        sent = 0
+        while _needs_confirmation(chunk) and sent < len(confirmations):
+            chunk += self._send_and_read(confirmations[sent].encode() + b"\r", to)
+            sent += 1
+        return self._finish_command_output(command, chunk, to)
+
+    def _finish_command_output(self, command: str, chunk: str, timeout: float) -> CommandResult:
+        """Handle pager and prompt checks after command output is read."""
         iterations = 0
         while detect_pager(chunk) and iterations < MAX_PAGER_ITERATIONS:
-            more = self._send_and_read(pager_space(), to)
+            more = self._send_and_read(pager_space(), timeout)
             if not more.strip():
                 break
             chunk += more
@@ -279,3 +309,7 @@ class CLISession(DeviceSession):
         """Decode command bytes for debug logs without control noise."""
         text = data.decode(errors="replace").replace("\r", "\\r").replace("\n", "\\n")
         return self._safe_text(text)
+
+
+def _needs_confirmation(text: str) -> bool:
+    return any(re.search(pattern, text) for pattern in CONFIRMATION_PATTERNS)

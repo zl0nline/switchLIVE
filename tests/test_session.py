@@ -455,6 +455,23 @@ class TestCLISession:
         assert "line2" in result.output
         assert t.written[-1] == b" "
 
+    def test_run_command_confirming_answers_yes_prompt(self):
+        """Reset/reboot commands can ask for y/n confirmation."""
+        t = MockTransport()
+        t.add_response(b"switch:>")  # initial prompt
+        t.add_response(b"Are you sure you want to proceed? (y/n)")
+        t.add_response(b"\r\nDone\nswitch:>")
+        t.open()
+
+        session = CLISession(t, vendor="dlink")
+        session.login(Credentials())
+
+        result = session.run_command_confirming("reset config")
+
+        assert result.success is True
+        assert b"y\r" in t.written
+        assert "Done" in result.output
+
     def test_transcript_stored(self):
         """Transcript хранится для диагностики."""
         t = MockTransport()

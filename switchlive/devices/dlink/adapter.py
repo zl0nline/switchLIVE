@@ -113,5 +113,13 @@ class DLinkAdapter(DeviceAdapter):
 
     def factory_reset(self, session: DeviceSession) -> None:
         if self._profile.factory_reset_cmd:
-            session.run_command(self._profile.factory_reset_cmd)
-        session.run_command(self._profile.reload_cmd)
+            _run_confirming(session, self._profile.factory_reset_cmd)
+        _run_confirming(session, self._profile.reload_cmd)
+
+
+def _run_confirming(session: DeviceSession, command: str) -> None:
+    runner = getattr(session, "run_command_confirming", None)
+    if runner:
+        runner(command, confirmations=("y", "yes"), timeout=20.0)
+        return
+    session.run_command(command, timeout=20.0)
