@@ -516,7 +516,9 @@ class TestCLISession:
         result = session.run_command_confirming("reset config", confirmations=("y", "yes"))
 
         assert result.success is True
-        assert t.written == [b"\r", b"reset config\r", b"y\r"]
+        # login() reads buffered data first (switch:> from add_response),
+        # so it does not need to send \r to wake the console.
+        assert t.written == [b"reset config\r", b"y\r"]
 
     def test_run_command_confirming_accepts_dlink_pipe_prompt(self):
         """D-Link reboot prompt can use (y|n) instead of (y/n)."""

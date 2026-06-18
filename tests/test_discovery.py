@@ -126,36 +126,28 @@ class TestTryLogin:
         assert result == "none"
 
     def test_login_standard(self):
-        # Первая попытка (empty creds): видит Login, не может войти
-        # Вторая попытка (standard): полный цикл
+        # _try_login с standard_creds пропускает пустой логин,
+        # сразу пробует standard creds.
         transport = MockTransport()
+        # _read_buffered в else-ветке _try_login (не prompt)
+        transport.add_response(b"")
+        # _send_and_read после пустого буфера — будим консоль
         transport.add_response(b"Login: ")
-        # username пустой → password prompt
-        transport.add_response(b"Password: ")
-        # password пустой → login failed
-        transport.add_response(b"Login invalid\r\n")
-        # Теперь standard login на новой "сессии" — но transport тот же
-        # Нужно пересоздать session
+        # login(admin/admin): _read_buffered пусто → отправляем \r → но Login уже в буфере
+        # На самом деле: transport.close/open/reset в _try_login, потом login()
+        # Нужны responses для login(admin): пробуждение, username, password, prompt
         transport.add_response(b"Login: ")
         transport.add_response(b"Password: ")
         transport.add_response(b"switch:>")
         transport.open()
 
-        session1 = CLISession(transport, vendor="dlink")
+        session = CLISession(transport, vendor="dlink")
         creds = [Credentials(username="admin", password="admin")]
 
         def progress(msg):
             return None
 
-        # Первая попытка с empty creds провалится
-        try:
-            session1.login(Credentials())
-        except Exception:
-            pass
-
-        # Пересоздаём session для standard login
-        session2 = CLISession(transport, vendor="dlink")
-        result = _try_login(session2, creds, None, progress)
+        result = _try_login(session, creds, None, progress)
         assert result is not None
 
     def test_login_manual(self):

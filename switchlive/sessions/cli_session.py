@@ -91,8 +91,17 @@ class CLISession(DeviceSession):
         self._transcript = ""
 
         try:
-            # Шаг 1: «подёргать» — отправить Enter (только CR), получить первый чанк
-            chunk = self._send_and_read(b"\r", self.prompt_timeout)
+            # Шаг 0: прочитать буфер без отправки — после reopen порта
+            # свитч может уже ждать ввода UserName (от предыдущей попытки).
+            # Если отправить \r сейчас, он воспримется как пустой username
+            # и потратит попытку на свитчах с lockout (DGS-3120: 3 попытки).
+            stale = self._read_buffered(self.prompt_timeout)
+
+            # Шаг 1: если буфер пуст — «подёргать» Enter (только CR)
+            if stale.strip():
+                chunk = stale
+            else:
+                chunk = self._send_and_read(b"\r", self.prompt_timeout)
 
             # Уже в командном режиме?
             prompt = find_command_prompt_current(chunk, self.vendor)
@@ -294,6 +303,23 @@ class CLISession(DeviceSession):
             log.debug("Transport reset_input_buffer not available or failed")
 
     # --- Внутренние методы ---
+
+    def _read_buffered(self, timeout: float) -> str:
+        """Прочитать данные из буфера транспорта без отправки чего-либо.
+
+        Используется после reopen порта: свитч может уже ждать ввода
+        UserName от предыдущей неудачной попытки, и отправка \\r
+        приведёт к тому, что следующий username уйдёт в поле пароля.
+        """
+        try:
+            raw = self.transport.read_until_idle(timeout)
+        except Exception:
+            return ""
+        chunk = raw.decode(errors="replace")
+        safe_chunk = self._safe_text(chunk)
+        self._transcript += safe_chunk
+        log.debug("RX (buffered): %s", safe_chunk)
+        return chunk
 
     def _send_and_read(self, data: bytes, timeout: float, delay: float = 0.1) -> str:
         """Отправить байты, прочитать ответ, добавить в transcript, вернуть chunk."""
