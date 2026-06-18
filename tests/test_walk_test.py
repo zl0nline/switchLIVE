@@ -324,7 +324,7 @@ class TestWalkTestEngine:
         assert result.traffic_passed is True
         adapter.shutdown_port.assert_called_once()
 
-    def test_gigabit_port_with_94m_iperf_gets_bottleneck_hint(self):
+    def test_gigabit_port_with_94m_iperf_gets_russian_bottleneck_hint(self):
         """1G link with ~100M iperf means bottleneck is probably elsewhere."""
         from switchlive.app.traffic_iperf import IperfConfig, IperfResult
         from switchlive.core.models import MacEntry
@@ -355,4 +355,4 @@ class TestWalkTestEngine:
             result = WalkTestEngine(adapter, session, config)._test_port(port, lambda s, m: None)
 
         assert result.verdict == PortVerdict.WARN
-        assert any("bottleneck" in note for note in result.notes)
+        assert any("проверьте uplink" in note for note in result.notes)

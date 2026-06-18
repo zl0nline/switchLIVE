@@ -351,8 +351,8 @@ class WalkTestEngine:
                     )
                     if _looks_like_100m_path_bottleneck(port, iperf_result.throughput_mbps):
                         result.notes.append(
-                            "iperf bottleneck hint: tested port link is 1G+, "
-                            "but throughput is ~100M; check uplink/server path"
+                            "Подсказка iperf: порт поднят в 1G+, но скорость около 100M; "
+                            "проверьте uplink, серверный порт, кабель или адаптер"
                         )
                         if result.verdict == PortVerdict.PASS:
                             result.verdict = PortVerdict.WARN
