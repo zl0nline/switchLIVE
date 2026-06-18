@@ -244,11 +244,35 @@ class TestRunDiscovery:
 
         with patch("switchlive.app.discovery.list_serial_ports", return_value=[mock_port]):
             with patch("switchlive.app.discovery._try_port", return_value=(None, False)):
-                result = run_discovery(standard_logins_path="nonexistent.txt")
+                result = run_discovery(
+                    standard_logins_path="nonexistent.txt",
+                    silent_retries=0,
+                )
 
         assert result.found is False
         assert result.error is not None
         assert "перезагрузить" in result.error.lower() or "не работает" in result.error.lower()
+
+    def test_silent_console_retry_can_find_after_reboot_wait(self):
+        """После reboot console может молчать; discovery должен повторить попытку."""
+        mock_port = MagicMock()
+        mock_port.name = "/dev/ttyUSB0"
+        found = DiscoveryResult(found=True)
+
+        with patch("switchlive.app.discovery.list_serial_ports", return_value=[mock_port]):
+            with patch(
+                "switchlive.app.discovery._try_port",
+                side_effect=[(None, False), (found, True)],
+            ):
+                with patch("switchlive.app.discovery.time.sleep") as sleep:
+                    result = run_discovery(
+                        standard_logins_path="nonexistent.txt",
+                        silent_retries=1,
+                        silent_retry_delay=0.1,
+                    )
+
+        assert result is found
+        sleep.assert_called_once_with(0.1)
 
     def test_found_on_first_port(self):
         """Устройство найдено — интеграционный тест через mock transport."""

@@ -51,6 +51,8 @@ def run_discovery(
     manual_credential_callback=None,
     progress_callback=None,
     baudrates: tuple[int, ...] | list[int] | None = None,
+    silent_retries: int = 6,
+    silent_retry_delay: float = 5.0,
 ) -> DiscoveryResult:
     """Автопоиск устройства по всем COM-портам.
 
@@ -60,6 +62,9 @@ def run_discovery(
             для запроса логина/пароля у оператора.
         progress_callback: функция(message: str) — для UI обновлений.
         baudrates: список скоростей serial console для проверки.
+        silent_retries: сколько раз повторить поиск, если serial открыт,
+            но консоль полностью молчит на всех скоростях.
+        silent_retry_delay: пауза между silent retry, в секундах.
 
     Returns:
         DiscoveryResult с найденным устройством или ошибкой.
@@ -99,26 +104,38 @@ def run_discovery(
     detectors = get_all_detectors()
     _progress(f"Зарегистрировано детекторов: {len(detectors)}")
 
-    any_console_output = False
+    attempts = max(1, silent_retries + 1)
+    for attempt in range(1, attempts + 1):
+        any_console_output = False
 
-    for port_info in ports:
-        port_name = port_info.name
-        _progress(f"Проверка порта {port_name}...")
+        for port_info in ports:
+            port_name = port_info.name
+            _progress(f"Проверка порта {port_name}...")
 
-        result, had_output = _try_port(
-            port_name,
-            standard_creds,
-            manual_credential_callback,
-            detectors,
-            _progress,
-            baudrates,
-        )
+            result, had_output = _try_port(
+                port_name,
+                standard_creds,
+                manual_credential_callback,
+                detectors,
+                _progress,
+                baudrates,
+            )
 
-        if had_output:
-            any_console_output = True
+            if had_output:
+                any_console_output = True
 
-        if result and result.found:
-            return result
+            if result and result.found:
+                return result
+
+        if any_console_output:
+            break
+
+        if attempt < attempts:
+            _progress(
+                f"Жду загрузку консоли {silent_retry_delay:g}с "
+                f"({attempt}/{silent_retries})"
+            )
+            time.sleep(silent_retry_delay)
 
     if not any_console_output:
         baudrate_list = ", ".join(str(baudrate) for baudrate in baudrates)

@@ -8,6 +8,7 @@ from switchlive.config import Config
 from switchlive.core.models import LinkStatus, MacEntry, PortInfo, PortType, PortVerdict
 from switchlive.ui.console import (
     _active_ports_from_link_status,
+    _close_discovery_session,
     _configure_poe_test,
     _configure_walk_test,
     _DiscoveryProgressPrinter,
@@ -84,6 +85,13 @@ class TestConfigureWalkTest:
         _run_discovery_wizard(config)
 
         assert run_discovery.call_args.kwargs["baudrates"] == (115200, 9600, 57600)
+
+    def test_plain_discovery_closes_session_after_summary(self):
+        result = MagicMock()
+
+        _close_discovery_session(result)
+
+        result.session.transport.close.assert_called_once()
 
     @patch("switchlive.ui.console.check_iperf3_available", return_value=False)
     @patch("builtins.input", return_value="")

@@ -222,14 +222,16 @@ def _manual_credential_prompt(standard_creds: list[Credentials]) -> Credentials 
 def _handle_discovery(config: Config) -> None:
     """Запуск автопоиска коммутатора."""
     result = _run_discovery_wizard(config)
-
-    print()
-    if result.found and result.identity:
-        _print_device_summary(result)
-    elif result.error:
-        print(_c(f"  [FAIL] {result.error}", "red"))
-    else:
-        print(_c("  [FAIL] Устройство не найдено", "red"))
+    try:
+        print()
+        if result.found and result.identity:
+            _print_device_summary(result)
+        elif result.error:
+            print(_c(f"  [FAIL] {result.error}", "red"))
+        else:
+            print(_c("  [FAIL] Устройство не найдено", "red"))
+    finally:
+        _close_discovery_session(result)
 
 
 def _run_discovery_wizard(config: Config):
@@ -247,6 +249,14 @@ def _run_discovery_wizard(config: Config):
         )
     finally:
         progress.finish()
+
+
+def _close_discovery_session(result) -> None:
+    """Close serial session after plain identify menu action."""
+    session = getattr(result, "session", None)
+    transport = getattr(session, "transport", None)
+    if transport:
+        transport.close()
 
 
 def _print_device_summary(result) -> None:
