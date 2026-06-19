@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 import select
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from switchlive.app.console_probe import baudrates_from_config
 from switchlive.app.default_state import check_default_state
@@ -310,7 +312,7 @@ def show_start_menu(
                 _handle_history_menu(config)
                 _print_bottom_menu()
             elif choice == "6":
-                print("\n  ⚠️ Настройки — ещё не реализовано\n")
+                _handle_settings_menu(config, config_path)
                 _print_bottom_menu()
             elif choice == "7":
                 _handle_debug_bundle(config, config_path, debug_context)
@@ -322,6 +324,97 @@ def show_start_menu(
             print()
             print(_c("  Операция прервана оператором. Выход.", "yellow"))
             break
+
+
+def _handle_settings_menu(config: Config, config_path: str | None) -> None:
+    """Settings menu: iperf server, port, etc."""
+    _section("Настройки")
+    while True:
+        iperf_ip = config.iperf_server_host or "не задан"
+        iperf_port = config.iperf_server_port
+        streams = config.iperf_parallel_streams
+        duration = config.iperf_duration
+
+        print(f"  1. IP iperf-сервера:     {iperf_ip}")
+        print(f"  2. Порт iperf-сервера:  {iperf_port}")
+        print(f"  3. Потоков (streams):   {streams}")
+        print(f"  4. Длительность (сек):  {duration}")
+        print(f"  5. Сохранить в конфиг")
+        print(f"  0. Назад")
+        print()
+
+        choice = input("  Выбор: ").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            val = input(f"  IP iperf-сервера [{iperf_ip}]: ").strip()
+            if val:
+                config.iperf_server_host = val
+                print(_c("  [OK] Обновлено", "green"))
+        elif choice == "2":
+            val = input(f"  Порт iperf-сервера [{iperf_port}]: ").strip()
+            try:
+                config.iperf_server_port = int(val) if val else 5201
+                print(_c("  [OK] Обновлено", "green"))
+            except ValueError:
+                print(_c("  [FAIL] Нужно число", "red"))
+        elif choice == "3":
+            val = input(f"  Потоков [{streams}]: ").strip()
+            try:
+                config.iperf_parallel_streams = int(val) if val else 4
+                print(_c("  [OK] Обновлено", "green"))
+            except ValueError:
+                print(_c("  [FAIL] Нужно число", "red"))
+        elif choice == "4":
+            val = input(f"  Длительность в секундах [{duration}]: ").strip()
+            try:
+                config.iperf_duration = int(val) if val else 10
+                print(_c("  [OK] Обновлено", "green"))
+            except ValueError:
+                print(_c("  [FAIL] Нужно число", "red"))
+        elif choice == "5":
+            if _save_config(config, config_path):
+                print(_c("  [OK] Конфиг сохранён", "green"))
+            else:
+                print(_c("  [WARN] Не удалось сохранить — настройки применены до перезапуска", "yellow"))
+        else:
+            print(_c("  Неверный выбор", "red"))
+        print()
+
+
+def _save_config(config: Config, config_path: str | None) -> bool:
+    """Save config to JSON file."""
+    if not config_path:
+        return False
+    try:
+        data = {
+            "iperf": {
+                "server_host": config.iperf_server_host,
+                "server_port": config.iperf_server_port,
+                "duration_sec": config.iperf_duration,
+                "parallel_streams": config.iperf_parallel_streams,
+                "min_throughput_mbps": config.iperf_min_throughput_mbps,
+                "max_loss_percent": config.iperf_max_loss_percent,
+            },
+            "timeouts": {
+                "link_sec": config.link_timeout_sec,
+                "poe_sec": config.poe_timeout_sec,
+                "max_sec": config.max_timeout_sec,
+            },
+            "reports": {
+                "report_dir": config.report_dir,
+                "db_path": config.db_path,
+            },
+            "standard_login_file": config.standard_login_file,
+            "debug": config.debug,
+        }
+        Path(config_path).write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return True
+    except Exception:
+        return False
 
 
 def _handle_debug_bundle(
