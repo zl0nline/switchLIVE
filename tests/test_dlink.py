@@ -350,25 +350,27 @@ class TestParsers:
         assert result["tx_power"] == "-2.1"
         assert result["temperature"] == "35.2"
 
-    def test_parse_show_ports_dgs3120_medium_column(self):
-        """DGS-3120-24SC format: Port / Medium(C|F) / State / Link/Speed/Duplex/FlowCtrl."""
+    def test_parse_show_ports_dgs3120_real_format(self):
+        """Real DGS-3120-24SC output with module prefix 1: and (C)/(F) notation."""
         output = """
-  Port  Medium  State    Link/Speed/Duplex/FlowCtrl  Address Learning
--------  ------  -------  --------------------------  ----------------
- 1     C       Enabled  Up/1G/Full/Disabled          Enabled
- 1     F       Enabled  Down/-/-/-                    Enabled
- 2     C       Enabled  Link Down                     Enabled
- 2     F       Enabled  Down/-/-/-                    Enabled
- 24    C       Enabled  Up/1G/Full/Disabled          Enabled
- 24    F       Enabled  Up/1G/Full/Disabled          Enabled
+Port      State/        Settings            Connection        Address  AutoSpeed
+          MDIX    Speed/Duplex/FlowCtrl Speed/Duplex/FlowCtrl Learning Downgrade
+-------- -------- --------------------- --------------------- -------- ---------
+1:1  (C) Enabled  Auto/Disabled         Link Down             Enabled  Disabled 
+          Auto  
+1:1  (F) Enabled  Auto/Disabled         Link Down             Enabled      -    
+            -    
+1:9      Enabled  Auto/Disabled         Link Down             Enabled      -    
+            -    
+1:24     Enabled  Auto/Disabled         1000M/Full/None       Enabled      -    
+            -    
 """
         ports = {port.index: port for port in parse_show_ports(output)}
-        assert ports[1].link_status == LinkStatus.UP
-        assert ports[1].actual_speed == 1000
-        assert ports[1].duplex == "Full"
-        assert ports[2].link_status == LinkStatus.DOWN
+        assert ports[1].link_status == LinkStatus.DOWN
+        assert ports[9].link_status == LinkStatus.DOWN
         assert ports[24].link_status == LinkStatus.UP
         assert ports[24].actual_speed == 1000
+        assert ports[24].duplex == "Full"
 
     def test_parse_speed(self):
         assert _parse_speed("100M") == 100
