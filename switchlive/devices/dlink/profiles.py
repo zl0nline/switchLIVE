@@ -228,8 +228,7 @@ class DLinkDGS3120(DLinkBase):
 
     Реальный вывод show ports подтверждает:
       Порты 1-8:   combo (C)/(F) — медь + SFP
-      Порты 9-16:  SFP-only (без C/F маркера)
-      Порты 17-24: copper-only (без C/F маркера, RJ45)
+      Порты 9-24:  SFP-only (без C/F маркера)
     """
 
     model = "DGS-3120-24/SC"
@@ -245,10 +244,7 @@ class DLinkDGS3120(DLinkBase):
             for i in range(1, 9)
         ] + [
             PortInfo(index=i, name=str(i), speed_mbps=1000, media="sfp", connector="SFP")
-            for i in range(9, 17)
-        ] + [
-            PortInfo(index=i, name=str(i), speed_mbps=1000, media="copper", connector="RJ45")
-            for i in range(17, 25)
+            for i in range(9, 25)
         ]
 
 

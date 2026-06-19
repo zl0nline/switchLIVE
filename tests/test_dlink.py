@@ -128,12 +128,9 @@ class TestProfiles:
         # Ports 1-8: combo (C/F confirmed by real device)
         assert ports[0].connector == "RJ45/SFP"
         assert ports[7].connector == "RJ45/SFP"
-        # Ports 9-16: SFP only
+        # Ports 9-24: SFP only
         assert ports[8].connector == "SFP"
-        assert ports[15].connector == "SFP"
-        # Ports 17-24: copper only
-        assert ports[16].connector == "RJ45"
-        assert ports[23].connector == "RJ45"
+        assert ports[23].connector == "SFP"
 
     def test_dgs36xx_sc_fiber_layout(self):
         p = DLinkDGS36xx()
