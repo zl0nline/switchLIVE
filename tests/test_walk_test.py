@@ -19,6 +19,8 @@ def _make_mock_adapter(ports=None, mac_table=None, counters=None,
     mac_table_sequence: список возвращаемых значений для последовательных
     вызовов get_mac_table (baseline → current → current ...).
     """
+    from switchlive.core.models import AdminStatus
+
     adapter = MagicMock()
     adapter.list_ports.return_value = ports or []
     if mac_table_sequence is not None:
@@ -26,7 +28,10 @@ def _make_mock_adapter(ports=None, mac_table=None, counters=None,
     else:
         adapter.get_mac_table.return_value = mac_table or []
     adapter.get_counters.return_value = counters or {}
-    adapter.shutdown_port.return_value = None
+
+    def _do_shutdown(session, port):
+        port.admin_status = AdminStatus.DISABLED
+    adapter.shutdown_port.side_effect = _do_shutdown
     return adapter
 
 

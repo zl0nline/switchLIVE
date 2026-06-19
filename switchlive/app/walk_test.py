@@ -437,18 +437,44 @@ class WalkTestEngine:
     def _shutdown_port(self, port: PortInfo, _progress) -> None:
         """Shutdown порта — сигнал оператору для перестановки кабеля."""
         self.state = WalkTestState.SHUTDOWN
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                self.adapter.shutdown_port(self.session, port)
+                # Verify shutdown by checking port state
+                if self._verify_port_shutdown(port):
+                    self.shutdown_ports.add(port.index)
+                    _progress(
+                        WalkTestState.SHUTDOWN,
+                        f"Порт {port.name} выключен — можно переставлять кабель",
+                    )
+                    return
+                _progress(
+                    WalkTestState.SHUTDOWN,
+                    f"Попытка {attempt + 1}/{max_attempts}: порт {port.name} всё ещё активен, retry...",
+                )
+            except Exception as e:
+                _progress(
+                    WalkTestState.SHUTDOWN,
+                    f"⚠️ Shutdown порт {port.name} (попытка {attempt + 1}): {e}",
+                )
+
+        _progress(
+            WalkTestState.SHUTDOWN,
+            f"⚠️ Не удалось shutdown порт {port.name} после {max_attempts} попыток",
+        )
+
+    def _verify_port_shutdown(self, port: PortInfo) -> bool:
+        """Verify port is actually disabled by checking link status."""
         try:
-            self.adapter.shutdown_port(self.session, port)
-            self.shutdown_ports.add(port.index)
-            _progress(
-                WalkTestState.SHUTDOWN,
-                f"Порт {port.name} выключен — можно переставлять кабель",
-            )
-        except Exception as e:
-            _progress(
-                WalkTestState.SHUTDOWN,
-                f"⚠️ Не удалось shutdown порт {port.name}: {e}",
-            )
+            live_ports = self.adapter.list_ports(self.session)
+            live = next((p for p in live_ports if p.index == port.index), None)
+            if live is None:
+                return True  # port not found, assume shutdown
+            from switchlive.core.models import LinkStatus, AdminStatus
+            return live.admin_status == AdminStatus.DISABLED or live.link_status == LinkStatus.DOWN
+        except Exception:
+            return True  # can't verify, assume success
 
 
 def _looks_like_100m_path_bottleneck(port: PortInfo, throughput_mbps: float) -> bool:

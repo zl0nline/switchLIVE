@@ -102,16 +102,21 @@ class TestWalkTestWithContractAdapter:
         assert result.verdict == PortVerdict.WARN
 
     def test_shutdown_called_through_engine(self):
-        """Engine вызывает shutdown_port через adapter."""
+        """Engine вызывает shutdown_port через adapter и проверяет результат."""
+        from switchlive.core.models import AdminStatus
         ports = [PortInfo(index=5, name="5", type=PortType.COPPER)]
         mac_seq = [
             [],
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=5)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=5)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=5)],
         ]
         adapter = _make_contract_adapter(ports=ports, counters={})
         adapter.get_mac_table.side_effect = mac_seq
+
+        # shutdown updates admin_status so verify passes
+        def do_shutdown(session, port):
+            port.admin_status = AdminStatus.DISABLED
+        adapter.shutdown_port.side_effect = do_shutdown
+
         session = MagicMock()
 
         engine = WalkTestEngine(adapter, session)
@@ -121,24 +126,26 @@ class TestWalkTestWithContractAdapter:
 
     def test_full_run_two_ports(self):
         """Полный прогон 2 порта через contract adapter."""
+        from switchlive.core.models import AdminStatus
         ports = [
             PortInfo(index=1, name="1", type=PortType.COPPER),
             PortInfo(index=2, name="2", type=PortType.COPPER),
         ]
-        # Для каждого порта: baseline (если первый), detect, retry...
         mac_seq = [
-            # Port 1
-            [],  # baseline
+            # Port 1: baseline + detect
+            [],
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            # Port 2: baseline + detect
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
-            # Port 2
-            [MacEntry(mac="AA:BB:CC:DD:EE:02", port_index=2)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:02", port_index=2)],
             [MacEntry(mac="AA:BB:CC:DD:EE:02", port_index=2)],
         ]
         adapter = _make_contract_adapter(ports=ports, counters={})
         adapter.get_mac_table.side_effect = mac_seq
+
+        def do_shutdown(session, port):
+            port.admin_status = AdminStatus.DISABLED
+        adapter.shutdown_port.side_effect = do_shutdown
+
         session = MagicMock()
 
         engine = WalkTestEngine(adapter, session)
@@ -174,6 +181,12 @@ class TestWalkTestWithContractAdapter:
         ]
         adapter = _make_contract_adapter(ports=ports, counters={})
         adapter.get_mac_table.side_effect = mac_seq
+
+        from switchlive.core.models import AdminStatus
+        def do_shutdown(session, port):
+            port.admin_status = AdminStatus.DISABLED
+        adapter.shutdown_port.side_effect = do_shutdown
+
         session = MagicMock()
 
         engine = WalkTestEngine(adapter, session)
