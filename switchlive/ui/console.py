@@ -361,6 +361,9 @@ def _handle_test_menu(config: Config) -> None:
         print("  Тест отменён оператором.")
         return
 
+    # Refresh port state after operator confirmation — they may have
+    # reconnected cables while waiting.
+    ports = adapter.list_ports(session)
     uplink_ready, uplink = _prepare_uplink(adapter, session, ports, config)
     if not uplink_ready:
         return
@@ -399,6 +402,9 @@ def _handle_selected_ports_test_menu(config: Config) -> None:
     if not selected:
         return
 
+    # Refresh port state after operator confirmed — they may have
+    # reconnected cables during port selection.
+    ports = adapter.list_ports(session)
     uplink_ready, uplink = _prepare_uplink(adapter, session, ports, config)
     if not uplink_ready:
         return
