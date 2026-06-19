@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from switchlive.core.models import AdminStatus, DeviceIdentity, LinkStatus, PortInfo
+
+log = logging.getLogger(__name__)
 
 
 def parse_show_switch(output: str) -> DeviceIdentity:
@@ -157,6 +160,51 @@ def parse_show_ports(output: str) -> list[PortInfo]:
                 actual_speed=speed_mbps if link_status == LinkStatus.UP else 0,
                 duplex=duplex,
             ),
+        )
+
+    # Format 3: DGS-3120 and similar — Medium column without parentheses
+    #   Port  Medium  State    Link/Speed/Duplex/FlowCtrl ...
+    #   1     C       Enabled  Up/1G/Full/Disabled
+    #   1     F       Enabled  Down/-/-/-
+    #   24    C       Enabled  Up/1G/Full/Disabled
+    for match in re.finditer(
+        r"^\s*(\d+)\s+(C|F)\s+"
+        r"(Enabled|Disabled)\s+"
+        r"(Up|Down)\s*/\s*"
+        r"([\d.]+[MG]?|-)\s*/\s*"
+        r"(\w+|-)\s*/",
+        output,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        idx = int(match.group(1))
+        medium = match.group(2).upper()
+        admin_str = match.group(3).lower()
+        link_str = match.group(4).lower()
+        speed_str = match.group(5).upper()
+        duplex = match.group(6)
+
+        speed_mbps = _parse_speed(speed_str) if speed_str != "-" else 0
+        admin_status = AdminStatus.ENABLED if admin_str == "enabled" else AdminStatus.DISABLED
+        link_status = LinkStatus.UP if link_str == "up" else LinkStatus.DOWN
+        _merge_live_port(
+            ports_by_index,
+            PortInfo(
+                index=idx,
+                name=str(idx),
+                speed_mbps=speed_mbps,
+                media="sfp" if medium == "F" else "copper",
+                connector="SFP" if medium == "F" else "RJ45",
+                admin_status=admin_status,
+                link_status=link_status,
+                actual_speed=speed_mbps if link_status == LinkStatus.UP else 0,
+                duplex=duplex if duplex != "-" else "",
+            ),
+        )
+
+    if not ports_by_index:
+        log.warning(
+            "parse_show_ports: no ports parsed from output (first 500 chars): %r",
+            output[:500],
         )
 
     return list(ports_by_index.values())

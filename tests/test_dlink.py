@@ -350,6 +350,26 @@ class TestParsers:
         assert result["tx_power"] == "-2.1"
         assert result["temperature"] == "35.2"
 
+    def test_parse_show_ports_dgs3120_medium_column(self):
+        """DGS-3120-24SC format: Port / Medium(C|F) / State / Link/Speed/Duplex/FlowCtrl."""
+        output = """
+  Port  Medium  State    Link/Speed/Duplex/FlowCtrl  Address Learning
+-------  ------  -------  --------------------------  ----------------
+ 1     C       Enabled  Up/1G/Full/Disabled          Enabled
+ 1     F       Enabled  Down/-/-/-                    Enabled
+ 2     C       Enabled  Link Down                     Enabled
+ 2     F       Enabled  Down/-/-/-                    Enabled
+ 24    C       Enabled  Up/1G/Full/Disabled          Enabled
+ 24    F       Enabled  Up/1G/Full/Disabled          Enabled
+"""
+        ports = {port.index: port for port in parse_show_ports(output)}
+        assert ports[1].link_status == LinkStatus.UP
+        assert ports[1].actual_speed == 1000
+        assert ports[1].duplex == "Full"
+        assert ports[2].link_status == LinkStatus.DOWN
+        assert ports[24].link_status == LinkStatus.UP
+        assert ports[24].actual_speed == 1000
+
     def test_parse_speed(self):
         assert _parse_speed("100M") == 100
         assert _parse_speed("1G") == 1000
