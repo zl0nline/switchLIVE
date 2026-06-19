@@ -224,7 +224,13 @@ class DLinkDGS3100(DLinkBase):
 
 
 class DLinkDGS3120(DLinkBase):
-    """DGS-3120-24/SC."""
+    """DGS-3120-24/SC.
+
+    Реальный вывод show ports подтверждает:
+      Порты 1-8:   combo (C)/(F) — медь + SFP
+      Порты 9-16:  SFP-only (без C/F маркера)
+      Порты 17-24: copper-only (без C/F маркера, RJ45)
+    """
 
     model = "DGS-3120-24/SC"
     family = "DGS-3120"
@@ -235,16 +241,13 @@ class DLinkDGS3120(DLinkBase):
     @property
     def ports(self) -> list[PortInfo]:
         return [
-            PortInfo(
-                index=i,
-                name=str(i),
-                speed_mbps=1000,
-                media="sfp",
-                connector="SFP",
-            )
-            for i in range(1, 17)
-        ] + [
             PortInfo(index=i, name=str(i), speed_mbps=1000, media="combo", connector="RJ45/SFP", role="combo")
+            for i in range(1, 9)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="sfp", connector="SFP")
+            for i in range(9, 17)
+        ] + [
+            PortInfo(index=i, name=str(i), speed_mbps=1000, media="copper", connector="RJ45")
             for i in range(17, 25)
         ]
 
