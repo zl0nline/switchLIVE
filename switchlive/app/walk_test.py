@@ -190,11 +190,11 @@ class WalkTestEngine:
         """Полный цикл тестирования одного порта."""
         result = PortTestResult(port=port)
 
-        # 1. Baseline MAC (один раз)
-        if self._baseline is None:
-            self.state = WalkTestState.BASELINE
-            self._baseline = take_mac_baseline(self.adapter, self.session)
-            _progress(WalkTestState.BASELINE, f"Baseline MAC: {len(self._baseline)} записей")
+        # 1. Baseline MAC (обновляем перед каждым портом — uplink MAC
+        # мог появиться или исчезнуть с предыдущего теста)
+        self.state = WalkTestState.BASELINE
+        self._baseline = take_mac_baseline(self.adapter, self.session)
+        _progress(WalkTestState.BASELINE, f"Baseline MAC: {len(self._baseline)} записей")
 
         self._enable_port(port, _progress)
 

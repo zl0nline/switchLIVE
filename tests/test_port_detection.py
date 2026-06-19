@@ -50,26 +50,21 @@ class TestBaseline:
 
 
 class TestDetectActivePort:
-    def _setup(self, baseline_macs, current_macs, ports):
-        adapter = MagicMock()
-        adapter.get_mac_table.return_value = current_macs
-        baseline = {mac: MacEntry(mac=mac, port_index=0) for mac in baseline_macs}
-        return adapter, baseline
-
     def test_single_new_mac(self):
         """Один новый MAC → порт найден."""
-        baseline = {"AA:BB:CC:DD:EE:01"}
+        baseline = {
+            "AA:BB:CC:DD:EE:01": MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1),
+        }
         current = [
-            MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1),  # old
+            MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1),  # same port
             MacEntry(mac="AA:BB:CC:DD:EE:99", port_index=3),  # new!
         ]
         ports = [PortInfo(index=i, name=str(i)) for i in range(1, 6)]
 
         adapter = MagicMock()
         adapter.get_mac_table.return_value = current
-        baseline_dict = {mac: MacEntry(mac=mac, port_index=0) for mac in baseline}
 
-        result = detect_active_port(adapter, _make_session(), baseline_dict, ports)
+        result = detect_active_port(adapter, _make_session(), baseline, ports)
 
         assert result.port is not None
         assert result.port.index == 3
@@ -78,15 +73,16 @@ class TestDetectActivePort:
 
     def test_no_new_macs(self):
         """Нет новых MAC — порт не найден."""
-        baseline = {"AA:BB:CC:DD:EE:01"}
+        baseline = {
+            "AA:BB:CC:DD:EE:01": MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1),
+        }
         current = [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)]
         ports = [PortInfo(index=i, name=str(i)) for i in range(1, 6)]
 
         adapter = MagicMock()
         adapter.get_mac_table.return_value = current
-        baseline_dict = {mac: MacEntry(mac=mac, port_index=0) for mac in baseline}
 
-        result = detect_active_port(adapter, _make_session(), baseline_dict, ports)
+        result = detect_active_port(adapter, _make_session(), baseline, ports)
 
         assert result.port is None
         assert result.confidence == "low"

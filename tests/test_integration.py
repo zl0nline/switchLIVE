@@ -149,30 +149,27 @@ class TestWalkTestWithContractAdapter:
         assert adapter.shutdown_port.call_count == 2
 
     def test_baseline_taken_once_empty(self):
-        """Регрессия: пустой baseline не должен пересниматься.
+        """Регрессия: baseline обновляется перед каждым портом.
 
-        Сценарий @albedo: baseline пустой, тестовый MAC один и тот же.
-        Без sentinel-фикса baseline переснимается на 2-м порту,
-        и delta ломается из-за stale FDB.
+        Baseline снимается перед каждым портом, чтобы uplink MAC (появившийся
+        после первого теста) не ломал delta-поиск на последующих портах.
         """
         ports = [
             PortInfo(index=1, name="1", type=PortType.COPPER),
             PortInfo(index=2, name="2", type=PortType.COPPER),
         ]
-        # baseline пустой → снимается один раз
-        # port 1: MAC AA на порту 1 (stale FDB)
-        # port 2: MAC AA переезжает на порт 2 (new delta vs baseline)
+        # baseline перед портом 1: пусто
+        # port 1 detect: MAC AA на порту 1
+        # baseline перед портом 2: MAC AA на порту 1 (stale)
+        # port 2 detect: MAC AA теперь на порту 2 → delta = port 2
         mac_seq = [
-            # baseline: пусто
+            # baseline 1: пусто
             [],
-            # port 1 detect: MAC на порту 1
+            # port 1 detect: MAC на порту 1 → delta находит
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
+            # baseline 2: MAC AA на порту 1 (stale)
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=1)],
-            # port 2 detect: тот же MAC теперь на порту 2
-            # (stale на порту 1 тоже может быть, но port 1 уже shutdown)
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
-            [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
+            # port 2 detect: MAC AA переехал на порт 2 → delta находит
             [MacEntry(mac="AA:BB:CC:DD:EE:01", port_index=2)],
         ]
         adapter = _make_contract_adapter(ports=ports, counters={})
@@ -183,7 +180,7 @@ class TestWalkTestWithContractAdapter:
         results = engine.run(ports=ports, progress_callback=lambda s, m: None)
 
         assert len(results) == 2
-        # Оба порта PASS — baseline не переснят, delta работает
+        # Оба порта PASS
         assert results[0].verdict == PortVerdict.PASS
         assert results[1].verdict == PortVerdict.PASS
         # shutdown_port вызван дважды

@@ -78,11 +78,22 @@ def detect_active_port(
     # Снять текущую MAC-таблицу
     current_entries = adapter.get_mac_table(session)
 
-    # Delta: MAC-адреса, которых не было в baseline
+    # Delta: MAC-адреса, которых не было в baseline,
+    # ИЛИ переехавшие на другой порт (MAC был на порту X, теперь на порту Y)
     new_macs: list[MacEntry] = []
     for entry in current_entries:
-        if entry.mac not in baseline:
+        existing = baseline.get(entry.mac)
+        if existing is None:
             new_macs.append(entry)
+        elif existing.port_index != entry.port_index:
+            # MAC переехал на другой порт — это сигнал
+            new_macs.append(entry)
+            log.info(
+                "MAC %s moved from port %d to port %d",
+                entry.mac,
+                existing.port_index,
+                entry.port_index,
+            )
 
     if not new_macs:
         link_result = detect_active_port_by_link_status(adapter, session, ports, shutdown_ports)
@@ -118,13 +129,30 @@ def detect_active_port(
     }
 
     if not valid_ports:
+        # New MACs only on ports outside the test set (e.g. uplink).
+        # Don't block — fall through to link_status check.
+        link_result = detect_active_port_by_link_status(adapter, session, ports, shutdown_ports)
+        if link_result.port is not None:
+            return link_result
+
+        log.warning(
+            "No new MAC on test ports; outside ports: %s",
+            list(ports_with_new_macs.keys()),
+        )
+        warnings = [
+            "Нет новых MAC в таблице — возможно кабель не подключён",
+            "или трафик от тестового хоста не дошёл",
+        ]
+        if ports_with_new_macs:
+            warnings.append(
+                f"Новые MAC на сторонних портах: {list(ports_with_new_macs.keys())}"
+            )
+        warnings.extend(link_result.warnings)
         return DetectionResult(
             port=None,
             method="mac_delta",
             confidence="low",
-            warnings=[
-                f"Новые MAC на неизвестных портах: {list(ports_with_new_macs.keys())}",
-            ],
+            warnings=warnings,
         )
 
     if len(valid_ports) > 1:
