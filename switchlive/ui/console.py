@@ -36,6 +36,13 @@ from switchlive.core.models import LinkStatus, PortInfo, PortType, PortVerdict
 from switchlive.core.timeouts import TimeoutPolicy
 from switchlive.diagnostics import DebugContext, collect_debug_bundle, configure_logging
 from switchlive.storage.history import list_recent_runs
+from switchlive.ui.phrases import (
+    login_joke,
+    port_fail_joke,
+    port_pass_joke,
+    test_done_joke,
+    uplink_joke,
+)
 
 ANSI = {
     "reset": "\033[0m",
@@ -230,6 +237,8 @@ def _handle_discovery(config: Config) -> None:
         print()
         if result.found and result.identity:
             _print_device_summary(result)
+            print()
+            print(_c(f"  {login_joke()}", "cyan"))
         elif result.error:
             print(_c(f"  [FAIL] {result.error}", "red"))
         else:
@@ -782,6 +791,8 @@ def _persist_test_artifacts(
         print(f"     HTML: {finalize.html_report}")
     if finalize.csv_report:
         print(f"     CSV:  {finalize.csv_report}")
+    print()
+    print(_c(f"  {test_done_joke()}", "cyan"))
 
 
 def _configure_walk_test(
@@ -865,11 +876,13 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
     active_link = _active_ports_from_link_status(candidates)
     if active_link:
         print(_c(f"  [OK] Аплинк готов: {_format_port_link(active_link[0])}", "green"))
+        print(_c(f"  {uplink_joke()}", "cyan"))
         return True, active_link[0]
 
     existing_uplink = detect_existing_uplink_by_mac_count(adapter, session, candidates)
     if existing_uplink.port:
         print(_c(f"  [OK] Аплинк готов: {_format_port_link(existing_uplink.port)}", "green"))
+        print(_c(f"  {uplink_joke()}", "cyan"))
         return True, existing_uplink.port
 
     print(_c("  [WAIT] Активный uplink не найден.", "yellow"))
@@ -878,6 +891,7 @@ def _prepare_uplink(adapter, session, ports: list[PortInfo], config: Config) -> 
     uplink = _wait_for_uplink(adapter, session, baseline, candidates, config)
     if uplink:
         print(_c(f"  [OK] Аплинк готов: {_format_port_link(uplink)}", "green"))
+        print(_c(f"  {uplink_joke()}", "cyan"))
         return True, uplink
 
     print(_c("  [WARN] Аплинк не удалось определить автоматически.", "yellow"))
@@ -1006,6 +1020,10 @@ def _print_walk_summary(results: list[PortTestResult]) -> None:
         print(_format_port_result(result))
         for note in result.notes[:3]:
             print(f"       - {note}")
+        if result.verdict == PortVerdict.PASS:
+            print(f"       {_c(port_pass_joke(), 'dim')}")
+        elif result.verdict == PortVerdict.WARN and result.detection and not result.detection.port:
+            print(f"       {_c(port_fail_joke(), 'dim')}")
 
 
 def _format_port_result(result: PortTestResult) -> str:
